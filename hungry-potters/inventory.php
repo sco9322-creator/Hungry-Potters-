@@ -350,7 +350,6 @@ require __DIR__ . '/includes/header.php';
                                     <label class="font-label-sm text-label-sm uppercase text-on-surface-variant" for="item-unit-custom">Custom unit</label>
                                     <input class="h-12 min-w-0 rounded-lg border border-outline-variant bg-surface px-3 text-on-surface outline-none focus:ring-2 focus:ring-primary-container" id="item-unit-custom" maxlength="30" name="unit_custom" data-custom-unit placeholder="Enter unit">
                                 </div>
-                                <p class="font-label-sm text-label-sm text-on-surface-variant">Changing the unit does not convert stock or recipe quantities. Dishes using this ingredient will be disabled until their recipes are reviewed.</p>
                             </div>
                             <div class="flex flex-col gap-1">
                                 <label class="font-label-sm text-label-sm uppercase text-on-surface-variant" for="item-category">Category</label>

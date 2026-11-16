@@ -1,0 +1,71 @@
+@layer base {
+    html,
+    body {
+        margin: 0;
+        padding: 0;
+    }
+
+    body {
+        overscroll-behavior: none;
+    }
+
+    main > :first-child {
+        margin-top: 0 !important;
+    }
+
+    main > :last-child {
+        margin-bottom: 0 !important;
+    }
+}
+
+::-webkit-scrollbar {
+    display: none;
+}
+
+html {
+    scrollbar-width: none;
+}
+
+[hidden] {
+    display: none !important;
+}
+
+@media (max-width: 767px) {
+    aside.fixed {
+        position: static;
+        width: 100%;
+        height: auto;
+    }
+
+    aside.fixed nav {
+        flex-direction: row;
+        overflow-x: auto;
+    }
+
+    aside.fixed nav a {
+        flex: 0 0 auto;
+    }
+
+    .pl-72 {
+        padding-left: 0;
+    }
+
+    header.fixed {
+        position: static;
+        left: auto;
+        right: auto;
+        height: auto;
+    }
+
+    header.fixed > div {
+        min-height: 5rem;
+        height: auto;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        padding: 0.75rem 1rem;
+    }
+
+    main.w-full {
+        padding: 1rem;
+    }
+}

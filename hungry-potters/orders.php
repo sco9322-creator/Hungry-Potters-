@@ -19,6 +19,7 @@ if (!in_array($sort, $validSorts, true)) {
     $sort = 'oldest';
 }
 $canUpdateOrders = in_array($_SESSION['role'] ?? '', ['admin', 'kitchen'], true);
+$canEditOrders = in_array($_SESSION['role'] ?? '', ['admin', 'cashier'], true);
 $flashMessage = $_SESSION['orders_message'] ?? '';
 unset($_SESSION['orders_message']);
 $flashType = $_SESSION['orders_message_type'] ?? 'success';
@@ -117,6 +118,9 @@ $selectedOrder = null;
 $selectedItems = [];
 $selectedIngredients = [];
 $selectedHistory = [];
+$canEditSelectedOrder = false;
+$hasUnmappedSelectedItem = false;
+$editableMenuItems = [];
 if ($orderId !== null && $orderId > 0) {
     $selectedStatement = $pdo->prepare(
         'SELECT orders.*, users.full_name AS staff_name,
@@ -131,13 +135,31 @@ if ($orderId !== null && $orderId > 0) {
 
     if ($selectedOrder !== null) {
         $itemsStatement = $pdo->prepare(
-            'SELECT id, item_name, quantity, unit_price, line_total, item_note, status
+            'SELECT id, menu_item_id, item_name, quantity, unit_price, line_total, item_note, status
              FROM order_items
              WHERE order_id = :id
              ORDER BY id'
         );
         $itemsStatement->execute(['id' => $orderId]);
         $selectedItems = $itemsStatement->fetchAll();
+        foreach ($selectedItems as $selectedItem) {
+            if ($selectedItem['menu_item_id'] === null) {
+                $hasUnmappedSelectedItem = true;
+                break;
+            }
+        }
+        $canEditSelectedOrder = $canEditOrders
+            && $selectedOrder['status'] === 'placed'
+            && !$hasUnmappedSelectedItem;
+        if ($canEditSelectedOrder) {
+            $editableMenuStatement = $pdo->query(
+                'SELECT id, name, price
+                 FROM menu_items
+                 WHERE is_active = 1 AND is_available = 1
+                 ORDER BY name'
+            );
+            $editableMenuItems = $editableMenuStatement->fetchAll();
+        }
 
         $ingredientsStatement = $pdo->prepare(
             'SELECT inventory.name, inventory.unit,
@@ -483,20 +505,72 @@ require __DIR__ . '/includes/header.php';
                             <h4 class="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">Ticket Line Items</h4>
                             <span class="rounded bg-surface-container px-2 py-0.5 font-label-sm text-label-sm text-on-surface-variant"><?= h(count($selectedItems)) ?> lines • <?= h(array_sum(array_map(static fn (array $item): int => (int) $item['quantity'], $selectedItems))) ?> units</span>
                         </div>
-                        <div class="flex flex-col divide-y divide-surface-container">
-                            <?php foreach ($selectedItems as $item): ?>
-                                <div class="flex items-center justify-between gap-3 py-3">
-                                    <div class="flex min-w-0 items-start gap-2">
-                                        <span class="flex h-7 min-w-8 items-center justify-center rounded bg-primary-fixed px-1 font-mono-metric text-xs font-bold text-primary"><?= h($item['quantity']) ?>×</span>
+                        <?php if ($canEditSelectedOrder): ?>
+                            <form action="actions/order-edit.php" class="flex flex-col gap-3" data-order-edit-form method="post">
+                                <input name="csrf_token" type="hidden" value="<?= h(csrf_token()) ?>">
+                                <input name="order_id" type="hidden" value="<?= h($selectedOrder['id']) ?>">
+                                <input name="return_query" type="hidden" value="<?= h(http_build_query(['id' => (int) $selectedOrder['id']])) ?>">
+                                <p class="font-label-sm text-label-sm text-on-surface-variant">Change a quantity, or set it to 0 to remove that line. Additions use current menu prices; existing lines keep their original price.</p>
+                                <?php foreach ($selectedItems as $item): ?>
+                                    <div class="grid grid-cols-[minmax(0,1fr)_6rem] items-center gap-3 border-b border-surface-container py-3">
+                                        <input name="expected_items[<?= h($item['id']) ?>]" type="hidden" value="<?= h($item['quantity']) ?>">
                                         <div class="min-w-0">
                                             <span class="block font-body-md-bold text-body-md-bold text-on-surface"><?= h($item['item_name']) ?></span>
                                             <?php if ($item['item_note']): ?><span class="block break-words font-label-sm text-label-sm text-on-surface-variant"><?= h($item['item_note']) ?></span><?php endif; ?>
+                                            <span class="font-label-sm text-label-sm text-on-surface-variant">₱<?= h(number_format((float) $item['unit_price'], 2)) ?> each</span>
                                         </div>
+                                        <label class="flex flex-col gap-1 font-label-sm text-on-surface-variant">Qty
+                                            <input class="h-10 w-full rounded-lg bg-surface-container-lowest px-2 text-on-surface focus:outline-none focus:ring-2 focus:ring-primary-container" max="100" min="0" name="existing_items[<?= h($item['id']) ?>]" required step="1" type="number" value="<?= h($item['quantity']) ?>">
+                                        </label>
                                     </div>
-                                    <span class="shrink-0 font-mono-metric text-sm font-semibold text-primary">₱<?= h(number_format((float) $item['line_total'], 2)) ?></span>
+                                <?php endforeach; ?>
+                                <div class="rounded-lg bg-surface-container-low p-3">
+                                    <div class="mb-2 flex items-center justify-between gap-2">
+                                        <h5 class="font-label-sm text-label-sm font-bold uppercase tracking-wider text-on-surface-variant">Add items</h5>
+                                        <button class="min-h-9 rounded-lg bg-surface-container px-3 font-label-md text-primary hover:bg-surface-container-high" data-add-order-item type="button">Add item</button>
+                                    </div>
+                                    <div class="flex flex-col gap-2" data-order-add-items></div>
+                                    <template data-order-add-item-template>
+                                        <div class="grid grid-cols-[minmax(0,1fr)_5rem_auto] items-end gap-2" data-order-add-item>
+                                            <label class="flex min-w-0 flex-col gap-1 font-label-sm text-on-surface-variant">Menu item
+                                                <select class="h-10 min-w-0 rounded-lg bg-surface-container-lowest px-2 text-on-surface focus:outline-none focus:ring-2 focus:ring-primary-container" name="new_items[__INDEX__][menu_item_id]" required>
+                                                    <option value="">Choose item</option>
+                                                    <?php foreach ($editableMenuItems as $menuItem): ?>
+                                                        <option value="<?= h($menuItem['id']) ?>"><?= h($menuItem['name'] . ' — ₱' . number_format((float) $menuItem['price'], 2)) ?></option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                            </label>
+                                            <label class="flex flex-col gap-1 font-label-sm text-on-surface-variant">Qty
+                                                <input class="h-10 w-full rounded-lg bg-surface-container-lowest px-2 text-on-surface focus:outline-none focus:ring-2 focus:ring-primary-container" max="100" min="1" name="new_items[__INDEX__][quantity]" required step="1" type="number" value="1">
+                                            </label>
+                                            <button aria-label="Remove added item" class="min-h-10 rounded-lg bg-error-container px-2 font-label-md text-on-error-container hover:opacity-80" data-remove-order-item type="button">Remove</button>
+                                        </div>
+                                    </template>
                                 </div>
-                            <?php endforeach; ?>
-                        </div>
+                                <button class="flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 font-body-md-bold text-body-md-bold text-on-primary hover:bg-primary-container" type="submit">
+                                    <span class="material-symbols-outlined text-[18px]">save</span>
+                                    <span>Save Order Changes</span>
+                                </button>
+                            </form>
+                        <?php else: ?>
+                            <div class="flex flex-col divide-y divide-surface-container">
+                                <?php foreach ($selectedItems as $item): ?>
+                                    <div class="flex items-center justify-between gap-3 py-3">
+                                        <div class="flex min-w-0 items-start gap-2">
+                                            <span class="flex h-7 min-w-8 items-center justify-center rounded bg-primary-fixed px-1 font-mono-metric text-xs font-bold text-primary"><?= h($item['quantity']) ?>×</span>
+                                            <div class="min-w-0">
+                                                <span class="block font-body-md-bold text-body-md-bold text-on-surface"><?= h($item['item_name']) ?></span>
+                                                <?php if ($item['item_note']): ?><span class="block break-words font-label-sm text-label-sm text-on-surface-variant"><?= h($item['item_note']) ?></span><?php endif; ?>
+                                            </div>
+                                        </div>
+                                        <span class="shrink-0 font-mono-metric text-sm font-semibold text-primary">₱<?= h(number_format((float) $item['line_total'], 2)) ?></span>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                            <?php if ($selectedStatus === 'placed' && $canEditOrders && $hasUnmappedSelectedItem): ?>
+                                <p class="mt-3 rounded-lg bg-secondary-container p-3 font-label-sm text-on-secondary-container">This order contains a line without a menu-item mapping, so it cannot be safely edited.</p>
+                            <?php endif; ?>
+                        <?php endif; ?>
                         <div class="mt-3 flex items-center justify-between rounded-lg bg-surface-container-high px-4 py-3">
                             <span class="font-body-md-bold text-body-md-bold text-on-surface">Total</span>
                             <span class="font-headline-sm text-headline-sm font-bold text-primary">₱<?= h(number_format((float) $selectedOrder['total'], 2)) ?></span>
@@ -529,7 +603,7 @@ require __DIR__ . '/includes/header.php';
                                     </div>
                                 <?php endforeach; ?>
                             </div>
-                            <p class="mt-2 font-label-sm text-label-sm text-on-surface-variant">These quantities were deducted when the order was placed.</p>
+                            <p class="mt-2 font-label-sm text-label-sm text-on-surface-variant">Stock was deducted when placed and is adjusted by any order edits.</p>
                         <?php endif; ?>
                     </section>
 

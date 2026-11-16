@@ -124,4 +124,22 @@
             }
         });
     });
+
+    const addOrderItemButton = document.querySelector('[data-add-order-item]');
+    const orderAddItems = document.querySelector('[data-order-add-items]');
+    const orderAddItemTemplate = document.querySelector('[data-order-add-item-template]');
+    let orderAddItemIndex = 0;
+    addOrderItemButton?.addEventListener('click', () => {
+        if (!orderAddItems || !orderAddItemTemplate) {
+            return;
+        }
+        const row = orderAddItemTemplate.content.firstElementChild.cloneNode(true);
+        row.querySelectorAll('[name]').forEach((input) => {
+            input.name = input.name.replace('__INDEX__', String(orderAddItemIndex));
+        });
+        orderAddItemIndex += 1;
+        row.querySelector('[data-remove-order-item]')?.addEventListener('click', () => row.remove());
+        orderAddItems.append(row);
+        row.querySelector('select')?.focus();
+    });
 })();

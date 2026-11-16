@@ -143,21 +143,20 @@ try {
     }
 
     $deductionStatement = $pdo->prepare(
-        'SELECT id, inventory_item_id, quantity_change
+        'SELECT inventory_item_id, SUM(quantity_change) AS quantity_change
          FROM inventory_movements
          WHERE order_id = :order_id
            AND movement_type = \'order_deduction\'
-           AND quantity_change < 0
-         ORDER BY inventory_item_id, id
-         FOR UPDATE'
+         GROUP BY inventory_item_id
+         HAVING SUM(quantity_change) < 0
+         ORDER BY inventory_item_id'
     );
     $deductionStatement->execute(['order_id' => $orderId]);
     $deductionRows = $deductionStatement->fetchAll();
     $deductionsByItem = [];
     foreach ($deductionRows as $deductionRow) {
         $inventoryItemId = (int) $deductionRow['inventory_item_id'];
-        $deductionsByItem[$inventoryItemId] = ($deductionsByItem[$inventoryItemId] ?? 0.0)
-            + abs((float) $deductionRow['quantity_change']);
+        $deductionsByItem[$inventoryItemId] = abs((float) $deductionRow['quantity_change']);
     }
     $hasDeductionRecords = $deductionsByItem !== [];
     ksort($deductionsByItem, SORT_NUMERIC);

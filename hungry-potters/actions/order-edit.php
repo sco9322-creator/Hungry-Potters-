@@ -2,8 +2,9 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../includes/auth.php';
-require_role(['admin', 'cashier']);
+require_role(ROLE_POLICY_ORDER_ENTRY);
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../includes/payments.php';
 require_once __DIR__ . '/../includes/telegram.php';
 
 function order_edit_redirect(string $message, string $type, int $orderId = 0, string $returnQuery = ''): never
@@ -129,6 +130,14 @@ try {
     if ($order['status'] !== 'placed') {
         $pdo->rollBack();
         order_edit_redirect('Only orders awaiting preparation can be edited.', 'error', $orderId, $returnQuery);
+    }
+    $paymentCountStatement = $pdo->prepare(
+        'SELECT COUNT(*) FROM order_payments WHERE order_id = :order_id'
+    );
+    $paymentCountStatement->execute(['order_id' => $orderId]);
+    if ((int) $paymentCountStatement->fetchColumn() > 0) {
+        $pdo->rollBack();
+        order_edit_redirect('An order with payment history cannot be edited. Refund or void it and create a corrected order.', 'error', $orderId, $returnQuery);
     }
 
     $orderItemsStatement = $pdo->prepare(

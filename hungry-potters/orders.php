@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 require_login();
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/payments.php';
 
 $validStatuses = ['all', 'active', 'placed', 'preparing', 'completed', 'cancelled'];
 $statusFilter = isset($_GET['status']) && is_string($_GET['status']) ? $_GET['status'] : 'all';
@@ -18,14 +19,14 @@ $validSorts = ['oldest', 'newest', 'prep', 'value'];
 if (!in_array($sort, $validSorts, true)) {
     $sort = 'oldest';
 }
-$canUpdateOrders = in_array($_SESSION['role'] ?? '', ['admin', 'kitchen'], true);
-$canEditOrders = in_array($_SESSION['role'] ?? '', ['admin', 'cashier'], true);
+$canUpdateOrders = role_is_allowed(ROLE_POLICY_KITCHEN_OPERATIONS);
+$canEditOrders = role_is_allowed(ROLE_POLICY_ORDER_ENTRY);
 $flashMessage = $_SESSION['orders_message'] ?? '';
 unset($_SESSION['orders_message']);
 $flashType = $_SESSION['orders_message_type'] ?? 'success';
 unset($_SESSION['orders_message_type']);
 
-$today = date('Y-m-d');
+$today = (string) $pdo->query('SELECT CURDATE()')->fetchColumn();
 $countsStatement = $pdo->prepare(
     'SELECT status, COUNT(*) AS order_count
      FROM orders
@@ -93,6 +94,19 @@ $ordersSql = 'SELECT
         orders.status,
         orders.subtotal,
         orders.total,
+        COALESCE((
+            SELECT SUM(
+                CASE WHEN payments.entry_type = \'payment\' THEN payments.amount ELSE -payments.amount END
+            )
+            FROM order_payments payments
+            WHERE payments.order_id = orders.id
+        ), 0) AS net_paid,
+        (
+            SELECT COUNT(*)
+            FROM order_payments payments
+            WHERE payments.order_id = orders.id
+              AND payments.entry_type = \'payment\'
+        ) AS payment_count,
         orders.kitchen_note,
         orders.created_at,
         orders.started_at,
@@ -118,13 +132,27 @@ $selectedOrder = null;
 $selectedItems = [];
 $selectedIngredients = [];
 $selectedHistory = [];
+$selectedPaymentEntries = [];
 $canEditSelectedOrder = false;
 $hasUnmappedSelectedItem = false;
 $editableMenuItems = [];
 if ($orderId !== null && $orderId > 0) {
     $selectedStatement = $pdo->prepare(
         'SELECT orders.*, users.full_name AS staff_name,
-                cancelled_user.full_name AS cancelled_by_name
+                cancelled_user.full_name AS cancelled_by_name,
+                COALESCE((
+                    SELECT SUM(
+                        CASE WHEN payments.entry_type = \'payment\' THEN payments.amount ELSE -payments.amount END
+                    )
+                    FROM order_payments payments
+                    WHERE payments.order_id = orders.id
+                ), 0) AS net_paid,
+                (
+                    SELECT COUNT(*)
+                    FROM order_payments payments
+                    WHERE payments.order_id = orders.id
+                      AND payments.entry_type = \'payment\'
+                ) AS payment_count
          FROM orders
          LEFT JOIN users ON users.id = orders.created_by
          LEFT JOIN users cancelled_user ON cancelled_user.id = orders.cancelled_by
@@ -142,6 +170,21 @@ if ($orderId !== null && $orderId > 0) {
         );
         $itemsStatement->execute(['id' => $orderId]);
         $selectedItems = $itemsStatement->fetchAll();
+        $paymentEntriesStatement = $pdo->prepare(
+            'SELECT payments.*, users.full_name AS recorded_by_name,
+                    COALESCE((
+                        SELECT SUM(reversals.amount)
+                        FROM order_payments reversals
+                        WHERE reversals.related_payment_id = payments.id
+                          AND reversals.entry_type IN (\'refund\', \'void\')
+                    ), 0) AS reversed_amount
+             FROM order_payments payments
+             LEFT JOIN users ON users.id = payments.recorded_by
+             WHERE payments.order_id = :id
+             ORDER BY payments.id'
+        );
+        $paymentEntriesStatement->execute(['id' => $orderId]);
+        $selectedPaymentEntries = $paymentEntriesStatement->fetchAll();
         foreach ($selectedItems as $selectedItem) {
             if ($selectedItem['menu_item_id'] === null) {
                 $hasUnmappedSelectedItem = true;
@@ -150,6 +193,7 @@ if ($orderId !== null && $orderId > 0) {
         }
         $canEditSelectedOrder = $canEditOrders
             && $selectedOrder['status'] === 'placed'
+            && (int) $selectedOrder['payment_count'] === 0
             && !$hasUnmappedSelectedItem;
         if ($canEditSelectedOrder) {
             $editableMenuStatement = $pdo->query(
@@ -186,6 +230,20 @@ if ($orderId !== null && $orderId > 0) {
         $selectedHistory = $historyStatement->fetchAll();
     }
 }
+
+$cashierShift = null;
+if ($canEditOrders) {
+    $cashierShiftStatement = $pdo->prepare(
+        'SELECT id, closed_at
+         FROM cashier_shifts
+         WHERE cashier_id = :cashier_id AND business_date = CURDATE()'
+    );
+    $cashierShiftStatement->execute(['cashier_id' => (int) $_SESSION['user_id']]);
+    $cashierShift = $cashierShiftStatement->fetch() ?: null;
+}
+$canRecordPayments = $canEditOrders
+    && $cashierShift !== null
+    && $cashierShift['closed_at'] === null;
 
 $statusLabels = [
     'placed' => 'Placed',
@@ -393,6 +451,27 @@ require __DIR__ . '/includes/header.php';
                                                 <span class="material-symbols-outlined text-[15px]"><?= h($statusIcon) ?></span>
                                                 <?= h($statusLabels[$orderStatus] ?? $orderStatus) ?>
                                             </span>
+                                            <?php if ($canEditOrders): ?>
+                                                <?php
+                                                $paidAmount = max(0, round((float) $order['net_paid'], 2));
+                                                $orderBalance = max(0, round((float) $order['total'] - $paidAmount, 2));
+                                                if ($orderStatus === 'cancelled' && (int) $order['payment_count'] > 0) {
+                                                    $paymentStatus = 'Reversed';
+                                                } elseif ($orderBalance <= 0) {
+                                                    $paymentStatus = 'Paid';
+                                                } elseif ($paidAmount > 0) {
+                                                    $paymentStatus = 'Partially paid';
+                                                } else {
+                                                    $paymentStatus = 'Unpaid';
+                                                }
+                                                ?>
+                                                <span class="mt-1 inline-flex rounded-full bg-surface-container px-2 py-1 font-label-sm text-label-sm font-semibold text-on-surface-variant">
+                                                    <?= h($paymentStatus) ?>
+                                                    <?php if ($orderBalance > 0 && $orderStatus !== 'cancelled'): ?>
+                                                        · ₱<?= h(number_format($orderBalance, 2)) ?> due
+                                                    <?php endif; ?>
+                                                </span>
+                                            <?php endif; ?>
                                             <?php if ($canCancelOrder): ?>
                                                 <button
                                                     class="inline-flex min-h-9 items-center gap-1 rounded-lg bg-error-container px-3 font-label-md text-label-md font-bold text-on-error-container transition-colors hover:bg-error"
@@ -569,6 +648,8 @@ require __DIR__ . '/includes/header.php';
                             </div>
                             <?php if ($selectedStatus === 'placed' && $canEditOrders && $hasUnmappedSelectedItem): ?>
                                 <p class="mt-3 rounded-lg bg-secondary-container p-3 font-label-sm text-on-secondary-container">This order contains a line without a menu-item mapping, so it cannot be safely edited.</p>
+                            <?php elseif ($selectedStatus === 'placed' && $canEditOrders && (int) $selectedOrder['payment_count'] > 0): ?>
+                                <p class="mt-3 rounded-lg bg-secondary-container p-3 font-label-sm text-on-secondary-container">Orders with payment history cannot be edited; refund or void the recorded payments and create a corrected order.</p>
                             <?php endif; ?>
                         <?php endif; ?>
                         <div class="mt-3 flex items-center justify-between rounded-lg bg-surface-container-high px-4 py-3">
@@ -576,6 +657,163 @@ require __DIR__ . '/includes/header.php';
                             <span class="font-headline-sm text-headline-sm font-bold text-primary">₱<?= h(number_format((float) $selectedOrder['total'], 2)) ?></span>
                         </div>
                     </section>
+
+                    <?php if ($canEditOrders): ?>
+                        <?php
+                        $selectedPaidAmount = max(0, round((float) $selectedOrder['net_paid'], 2));
+                        $selectedBalanceDue = max(0, round((float) $selectedOrder['total'] - $selectedPaidAmount, 2));
+                        ?>
+                        <section class="rounded-xl border border-surface-container bg-surface-container-low p-4">
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <h4 class="font-label-sm text-label-sm font-bold uppercase tracking-wider text-on-surface-variant">Payments</h4>
+                                    <p class="mt-1 font-label-sm text-label-sm text-on-surface-variant">Record money actually received. This app does not process cashless transactions.</p>
+                                </div>
+                                <div class="text-right font-label-md text-label-md">
+                                    <div>Paid <strong class="font-mono-metric text-primary">₱<?= h(number_format($selectedPaidAmount, 2)) ?></strong></div>
+                                    <div>Balance <strong class="font-mono-metric <?= $selectedBalanceDue > 0 ? 'text-error' : 'text-primary' ?>">₱<?= h(number_format($selectedBalanceDue, 2)) ?></strong></div>
+                                </div>
+                            </div>
+
+                            <?php if ($selectedPaymentEntries === []): ?>
+                                <p class="mt-3 rounded-lg bg-surface-container-lowest p-3 font-label-md text-label-md text-on-surface-variant">No payment has been recorded. The order can still be prepared while unpaid.</p>
+                            <?php else: ?>
+                                <ol class="mt-4 flex flex-col divide-y divide-surface-container">
+                                    <?php foreach ($selectedPaymentEntries as $paymentEntry): ?>
+                                        <?php
+                                        $entryType = (string) $paymentEntry['entry_type'];
+                                        $entryLabel = match ($entryType) {
+                                            'payment' => 'Payment received',
+                                            'refund' => 'Refund',
+                                            'void' => 'Payment void',
+                                            default => ucfirst($entryType),
+                                        };
+                                        $entrySign = $entryType === 'payment' ? '+' : '−';
+                                        ?>
+                                        <li class="py-3">
+                                            <div class="flex flex-wrap items-start justify-between gap-2">
+                                                <div>
+                                                    <span class="font-body-md-bold text-body-md-bold text-on-surface"><?= h($entryLabel) ?></span>
+                                                    <span class="ml-1 font-label-sm text-label-sm text-on-surface-variant"><?= h(payment_method_label((string) $paymentEntry['method'])) ?></span>
+                                                    <p class="font-label-sm text-label-sm text-on-surface-variant">
+                                                        <?= h(date('M j, g:i A', strtotime((string) $paymentEntry['recorded_at']))) ?>
+                                                        <?= $paymentEntry['recorded_by_name'] ? ' · ' . h($paymentEntry['recorded_by_name']) : '' ?>
+                                                        <?= $paymentEntry['reference_code'] ? ' · Ref ' . h($paymentEntry['reference_code']) : '' ?>
+                                                    </p>
+                                                    <?php if ($entryType === 'payment' && $paymentEntry['method'] === 'cash'): ?>
+                                                        <p class="font-label-sm text-label-sm text-on-surface-variant">
+                                                            Tendered ₱<?= h(number_format((float) $paymentEntry['tendered_amount'], 2)) ?>
+                                                            · Change ₱<?= h(number_format((float) $paymentEntry['change_amount'], 2)) ?>
+                                                        </p>
+                                                    <?php endif; ?>
+                                                    <?php if ($paymentEntry['reason']): ?>
+                                                        <p class="font-label-sm text-label-sm text-on-surface-variant"><?= h($paymentEntry['reason']) ?></p>
+                                                    <?php endif; ?>
+                                                </div>
+                                                <span class="font-mono-metric font-bold <?= $entryType === 'payment' ? 'text-primary' : 'text-error' ?>">
+                                                    <?= h($entrySign) ?>₱<?= h(number_format((float) $paymentEntry['amount'], 2)) ?>
+                                                </span>
+                                            </div>
+                                            <?php if ($entryType === 'payment' && (float) $paymentEntry['reversed_amount'] > 0): ?>
+                                                <p class="mt-1 font-label-sm text-label-sm text-on-surface-variant">
+                                                    Reversed ₱<?= h(number_format((float) $paymentEntry['reversed_amount'], 2)) ?>
+                                                    of ₱<?= h(number_format((float) $paymentEntry['amount'], 2)) ?>
+                                                </p>
+                                            <?php endif; ?>
+
+                                            <?php
+                                            $reversibleAmount = round((float) $paymentEntry['amount'] - (float) $paymentEntry['reversed_amount'], 2);
+                                            if (
+                                                $canRecordPayments
+                                                && $selectedStatus !== 'cancelled'
+                                                && $entryType === 'payment'
+                                                && $reversibleAmount > 0
+                                            ):
+                                            ?>
+                                                <div class="mt-2 flex flex-col gap-2 sm:flex-row">
+                                                    <form action="actions/payment-record.php" class="flex flex-1 flex-col gap-2 rounded-lg bg-surface-container-lowest p-3" method="post">
+                                                        <input name="csrf_token" type="hidden" value="<?= h(csrf_token()) ?>">
+                                                        <input name="order_id" type="hidden" value="<?= h($selectedOrder['id']) ?>">
+                                                        <input name="entry_type" type="hidden" value="refund">
+                                                        <input name="related_payment_id" type="hidden" value="<?= h($paymentEntry['id']) ?>">
+                                                        <label class="font-label-sm text-on-surface-variant">
+                                                            Refund amount
+                                                            <input class="mt-1 h-10 w-full rounded-lg bg-surface-container px-2 font-mono-metric text-on-surface" max="<?= h(number_format($reversibleAmount, 2, '.', '')) ?>" min="0.01" name="amount" required step="0.01" type="number" value="<?= h(number_format($reversibleAmount, 2, '.', '')) ?>">
+                                                        </label>
+                                                        <label class="font-label-sm text-on-surface-variant">
+                                                            Refund method
+                                                            <select class="mt-1 h-10 w-full rounded-lg bg-surface-container px-2 text-on-surface" name="method">
+                                                                <option value="cash">Cash</option>
+                                                                <option value="ewallet">GCash / e-wallet</option>
+                                                            </select>
+                                                        </label>
+                                                        <label class="font-label-sm text-on-surface-variant">
+                                                            Reason
+                                                            <input class="mt-1 h-10 w-full rounded-lg bg-surface-container px-2 text-on-surface" maxlength="255" name="reason" required type="text">
+                                                        </label>
+                                                        <button class="min-h-9 rounded-lg bg-error-container px-3 font-label-md font-bold text-on-error-container" type="submit">Record refund</button>
+                                                    </form>
+                                                    <?php if ((float) $paymentEntry['reversed_amount'] === 0.0): ?>
+                                                        <form action="actions/payment-record.php" class="flex flex-1 flex-col justify-end gap-2 rounded-lg bg-surface-container-lowest p-3" method="post">
+                                                            <input name="csrf_token" type="hidden" value="<?= h(csrf_token()) ?>">
+                                                            <input name="order_id" type="hidden" value="<?= h($selectedOrder['id']) ?>">
+                                                            <input name="entry_type" type="hidden" value="void">
+                                                            <input name="related_payment_id" type="hidden" value="<?= h($paymentEntry['id']) ?>">
+                                                            <input name="method" type="hidden" value="<?= h($paymentEntry['method']) ?>">
+                                                            <input name="amount" type="hidden" value="<?= h(number_format((float) $paymentEntry['amount'], 2, '.', '')) ?>">
+                                                            <label class="font-label-sm text-on-surface-variant">
+                                                                Void reason
+                                                                <input class="mt-1 h-10 w-full rounded-lg bg-surface-container px-2 text-on-surface" maxlength="255" name="reason" required type="text">
+                                                            </label>
+                                                            <button class="min-h-9 rounded-lg border border-outline-variant px-3 font-label-md font-bold text-on-surface-variant" type="submit">Void full payment</button>
+                                                        </form>
+                                                    <?php endif; ?>
+                                                </div>
+                                            <?php endif; ?>
+                                        </li>
+                                    <?php endforeach; ?>
+                                </ol>
+                            <?php endif; ?>
+
+                            <?php if ($selectedBalanceDue > 0 && $selectedStatus !== 'cancelled'): ?>
+                                <?php if ($canRecordPayments): ?>
+                                    <form action="actions/payment-record.php" class="mt-4 flex flex-col gap-3 rounded-lg border border-outline-variant bg-surface-container-lowest p-4" method="post">
+                                        <input name="csrf_token" type="hidden" value="<?= h(csrf_token()) ?>">
+                                        <input name="order_id" type="hidden" value="<?= h($selectedOrder['id']) ?>">
+                                        <input name="entry_type" type="hidden" value="payment">
+                                        <h5 class="font-body-md-bold text-body-md-bold text-primary">Record payment</h5>
+                                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                            <label class="font-label-sm text-on-surface-variant">
+                                                Amount received
+                                                <input class="mt-1 h-11 w-full rounded-lg bg-surface-container px-3 font-mono-metric text-on-surface" max="<?= h(number_format($selectedBalanceDue, 2, '.', '')) ?>" min="0.01" name="amount" required step="0.01" type="number" value="<?= h(number_format($selectedBalanceDue, 2, '.', '')) ?>">
+                                            </label>
+                                            <label class="font-label-sm text-on-surface-variant">
+                                                Method
+                                                <select class="mt-1 h-11 w-full rounded-lg bg-surface-container px-3 text-on-surface" name="method" required>
+                                                    <option value="cash">Cash</option>
+                                                    <option value="ewallet">GCash / e-wallet</option>
+                                                </select>
+                                            </label>
+                                            <label class="font-label-sm text-on-surface-variant">
+                                                Cash tendered (required for cash)
+                                                <input class="mt-1 h-11 w-full rounded-lg bg-surface-container px-3 font-mono-metric text-on-surface" min="0.01" name="tendered_amount" step="0.01" type="number">
+                                            </label>
+                                            <label class="font-label-sm text-on-surface-variant">
+                                                Transaction reference (optional)
+                                                <input class="mt-1 h-11 w-full rounded-lg bg-surface-container px-3 text-on-surface" maxlength="100" name="reference_code" type="text">
+                                            </label>
+                                        </div>
+                                        <button class="flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 font-body-md-bold text-on-primary" type="submit">Save payment</button>
+                                    </form>
+                                <?php else: ?>
+                                    <p class="mt-4 rounded-lg bg-secondary-container p-3 font-label-md text-on-secondary-container">
+                                        Open your cashier shift before recording payments.
+                                        <a class="font-bold underline" href="cashier-closeout.php">Go to Cashier Closeout</a>
+                                    </p>
+                                <?php endif; ?>
+                            <?php endif; ?>
+                        </section>
+                    <?php endif; ?>
 
                     <?php if ($selectedOrder['kitchen_note']): ?>
                         <section class="rounded-xl border-l-4 border-secondary bg-secondary-fixed/40 p-4">
@@ -666,7 +904,7 @@ require __DIR__ . '/includes/header.php';
                     </div>
 
                     <div class="mt-4 rounded-lg border border-error/30 bg-error-container/40 p-3 font-label-md text-label-md text-on-error-container">
-                        Payment handling is not automatic. If payment has already been collected, handle any refund or void separately.
+                        Refund or void all recorded payments before cancelling. The system blocks cancellation while any payment balance remains.
                     </div>
 
                     <?php if (($_SESSION['role'] ?? '') === 'admin'): ?>

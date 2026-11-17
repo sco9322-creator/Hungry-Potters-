@@ -2,8 +2,9 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/includes/auth.php';
-require_role(['admin', 'cashier']);
+require_role(ROLE_POLICY_ORDER_ENTRY);
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/order-queue.php';
 
 $menuStatement = $pdo->query(
     "SELECT
@@ -51,11 +52,9 @@ $categoryStatement = $pdo->query(
 );
 $menuCategories = $categoryStatement->fetchAll();
 
-$queueStatement = $pdo->query(
-    'SELECT COALESCE(MAX(queue_number), 0) + 1 FROM orders'
-);
-$nextQueueNumber = (int) $queueStatement->fetchColumn();
-$nextOrderNumber = 'ORD-' . str_pad((string) $nextQueueNumber, 4, '0', STR_PAD_LEFT);
+$queuePreview = order_queue_preview($pdo);
+$nextQueueNumber = $queuePreview['next_queue_number'];
+$nextOrderNumber = format_order_number($queuePreview['business_date'], $nextQueueNumber);
 $flashMessage = $_SESSION['pos_message'] ?? '';
 unset($_SESSION['pos_message']);
 $flashType = $_SESSION['pos_message_type'] ?? 'success';

@@ -2,8 +2,9 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../includes/auth.php';
-require_role(['admin', 'cashier']);
+require_role(ROLE_POLICY_ORDER_ENTRY);
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../includes/payments.php';
 
 function order_cancel_redirect(
     string $message,
@@ -129,6 +130,10 @@ try {
     if (!in_array($status, ['placed', 'preparing'], true)) {
         $pdo->rollBack();
         order_cancel_redirect('Only placed or preparing orders can be cancelled.', 'error', $returnQuery);
+    }
+    if (order_net_paid_amount($pdo, $orderId) > 0) {
+        $pdo->rollBack();
+        order_cancel_redirect('Refund or void all recorded payments before cancelling this order.', 'error', $returnQuery);
     }
     if ((int) $order['inventory_restored'] === 1) {
         $pdo->rollBack();

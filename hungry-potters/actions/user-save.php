@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../includes/auth.php';
-require_role(['admin']);
+require_role(ROLE_POLICY_ADMIN);
 require_once __DIR__ . '/../config/db.php';
 
 function user_management_redirect(string $message, string $type): never
@@ -60,8 +60,15 @@ if (in_array($action, ['deactivate', 'activate'], true)) {
                 user_management_redirect('The last active admin account cannot be deactivated.', 'error');
             }
         }
-        $updateStatement = $pdo->prepare('UPDATE users SET is_active = :is_active WHERE id = :id');
-        $updateStatement->execute(['is_active' => $action === 'activate' ? 1 : 0, 'id' => $userId]);
+        $newActiveStatus = $action === 'activate' ? 1 : 0;
+        if ((int) $target['is_active'] !== $newActiveStatus) {
+            $updateStatement = $pdo->prepare(
+                'UPDATE users
+                 SET is_active = :is_active, session_version = session_version + 1
+                 WHERE id = :id'
+            );
+            $updateStatement->execute(['is_active' => $newActiveStatus, 'id' => $userId]);
+        }
         $pdo->commit();
     } catch (Throwable $exception) {
         if ($pdo->inTransaction()) {
@@ -98,11 +105,24 @@ try {
             "SELECT id FROM users WHERE role = 'admin' AND is_active = 1 ORDER BY id FOR UPDATE"
         );
         $activeAdminIds = array_map('intval', $activeAdminStatement->fetchAll(PDO::FETCH_COLUMN));
-        $existingStatement = $pdo->prepare('SELECT id, role, is_active FROM users WHERE id = :id');
+        $existingStatement = $pdo->prepare('SELECT id, role, is_active FROM users WHERE id = :id FOR UPDATE');
         $existingStatement->execute(['id' => $userId]);
         $existing = $existingStatement->fetch();
         if (!$existing) {
             user_management_redirect('The selected account could not be found.', 'error');
+        }
+        if ($role === 'kitchen' && in_array($existing['role'], ['admin', 'cashier'], true)) {
+            $openShiftStatement = $pdo->prepare(
+                'SELECT id
+                 FROM cashier_shifts
+                 WHERE cashier_id = :cashier_id AND closed_at IS NULL
+                 LIMIT 1'
+            );
+            $openShiftStatement->execute(['cashier_id' => $userId]);
+            if ($openShiftStatement->fetchColumn()) {
+                $pdo->rollBack();
+                user_management_redirect('Close all open cashier shifts before changing this account to kitchen.', 'error');
+            }
         }
         if (
             $existing['role'] === 'admin'
@@ -117,7 +137,9 @@ try {
         if ($password !== '') {
             $updateStatement = $pdo->prepare(
                 'UPDATE users
-                 SET username = :username, full_name = :full_name, role = :role, password_hash = :password_hash
+                 SET username = :username, full_name = :full_name, role = :role,
+                     password_hash = :password_hash,
+                     session_version = session_version + :session_version_increment
                  WHERE id = :id'
             );
             $updateStatement->execute([
@@ -125,16 +147,21 @@ try {
                 'full_name' => $fullName,
                 'role' => $role,
                 'password_hash' => password_hash($password, PASSWORD_DEFAULT),
+                'session_version_increment' => 1,
                 'id' => $userId,
             ]);
         } else {
             $updateStatement = $pdo->prepare(
-                'UPDATE users SET username = :username, full_name = :full_name, role = :role WHERE id = :id'
+                'UPDATE users
+                 SET username = :username, full_name = :full_name, role = :role,
+                     session_version = session_version + :session_version_increment
+                 WHERE id = :id'
             );
             $updateStatement->execute([
                 'username' => $username,
                 'full_name' => $fullName,
                 'role' => $role,
+                'session_version_increment' => $existing['role'] !== $role ? 1 : 0,
                 'id' => $userId,
             ]);
         }

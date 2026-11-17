@@ -6,16 +6,18 @@ require_login();
 
 require_once __DIR__ . '/config/db.php';
 
-$today = date('Y-m-d');
+$today = (string) $pdo->query('SELECT CURDATE()')->fetchColumn();
 $flashMessage = $_SESSION['dashboard_message'] ?? '';
 unset($_SESSION['dashboard_message']);
 $flashType = $_SESSION['dashboard_message_type'] ?? 'success';
 unset($_SESSION['dashboard_message_type']);
 
 $salesStatement = $pdo->prepare(
-    "SELECT COALESCE(SUM(total), 0)
-     FROM orders
-     WHERE status = 'completed' AND DATE(completed_at) = :today"
+    "SELECT COALESCE(SUM(
+        CASE WHEN entry_type = 'payment' THEN amount ELSE -amount END
+     ), 0)
+     FROM order_payments
+     WHERE business_date = :today"
 );
 $salesStatement->execute(['today' => $today]);
 $todaySales = (float) $salesStatement->fetchColumn();
@@ -161,10 +163,12 @@ require __DIR__ . '/includes/header.php';
             </div>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-            <a class="flex min-h-12 items-center justify-center gap-1 rounded-lg bg-primary px-5 font-body-md-bold text-body-md-bold text-on-primary shadow-md transition-colors hover:bg-primary-container" href="new-order.php">
-                <span class="material-symbols-outlined text-[22px]">add</span>
-                <span>+ New Order</span>
-            </a>
+            <?php if (role_is_allowed(ROLE_POLICY_ORDER_ENTRY)): ?>
+                <a class="flex min-h-12 items-center justify-center gap-1 rounded-lg bg-primary px-5 font-body-md-bold text-body-md-bold text-on-primary shadow-md transition-colors hover:bg-primary-container" href="new-order.php">
+                    <span class="material-symbols-outlined text-[22px]">add</span>
+                    <span>+ New Order</span>
+                </a>
+            <?php endif; ?>
             <?php if (($_SESSION['role'] ?? '') === 'admin'): ?>
                 <form action="actions/telegram-test.php" method="post">
                     <input name="csrf_token" type="hidden" value="<?= h(csrf_token()) ?>">
@@ -354,7 +358,7 @@ require __DIR__ . '/includes/header.php';
                     <span class="font-body-md-bold text-on-surface"><?= h($orderCounts['cancelled']) ?></span>
                 </div>
                 <div class="flex items-center justify-between rounded-lg bg-surface-container-low p-3">
-                    <span class="font-label-sm text-label-sm font-bold uppercase tracking-wider text-on-surface-variant">Today's Sales</span>
+                    <span class="font-label-sm text-label-sm font-bold uppercase tracking-wider text-on-surface-variant">Net Payments Today</span>
                     <span class="font-headline-sm text-headline-sm font-bold text-primary">₱<?= h(number_format($todaySales, 2)) ?></span>
                 </div>
             </section>

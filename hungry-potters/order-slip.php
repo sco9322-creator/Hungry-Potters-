@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/includes/auth.php';
-require_role(['admin', 'cashier']);
+require_role(ROLE_POLICY_ORDER_ENTRY);
 require_once __DIR__ . '/config/db.php';
 
 $slipNumber = isset($_GET['slip']) && is_string($_GET['slip'])

@@ -2,8 +2,9 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../includes/auth.php';
-require_role(['admin', 'cashier']);
+require_role(ROLE_POLICY_ORDER_ENTRY);
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../includes/order-queue.php';
 require_once __DIR__ . '/../includes/telegram.php';
 
 header('Content-Type: application/json; charset=utf-8');
@@ -184,14 +185,13 @@ try {
         ]);
     }
 
-    $queueStatement = $pdo->query(
-        'SELECT COALESCE(MAX(queue_number), 0) + 1 AS next_queue FROM orders'
-    );
-    $queueNumber = (int) $queueStatement->fetchColumn();
-    $orderNumber = 'ORD-' . str_pad((string) $queueNumber, 4, '0', STR_PAD_LEFT);
+    $orderCreatedAt = (string) $pdo->query('SELECT NOW()')->fetchColumn();
+    $businessDate = substr($orderCreatedAt, 0, 10);
+    $queueNumber = reserve_order_queue_number($pdo, $businessDate);
+    $orderNumber = format_order_number($businessDate, $queueNumber);
     $slipNumber = null;
     if ($orderType === 'takeout') {
-        $slipDate = (string) $pdo->query("SELECT DATE_FORMAT(NOW(), '%Y-%m-%d')")->fetchColumn();
+        $slipDate = $businessDate;
         $counterInsert = $pdo->prepare(
             'INSERT INTO order_slip_counters (slip_date, last_number)
              VALUES (:slip_date, 0)
@@ -219,7 +219,7 @@ try {
              subtotal, total, kitchen_note, created_by, cashier_name, created_at)
          VALUES
             (:order_number, :slip_number, :queue_number, :order_type, :location, \'placed\',
-             :subtotal, :total, :kitchen_note, :created_by, :cashier_name, NOW())'
+             :subtotal, :total, :kitchen_note, :created_by, :cashier_name, :created_at)'
     );
     $orderStatement->execute([
         'order_number' => $orderNumber,
@@ -232,6 +232,7 @@ try {
         'kitchen_note' => $kitchenNote !== '' ? $kitchenNote : null,
         'created_by' => $_SESSION['user_id'],
         'cashier_name' => $_SESSION['full_name'] ?? $_SESSION['username'],
+        'created_at' => $orderCreatedAt,
     ]);
     $orderId = (int) $pdo->lastInsertId();
 

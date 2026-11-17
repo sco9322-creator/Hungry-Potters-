@@ -4,7 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 
 if (isset($_SESSION['user_id'], $_SESSION['role'])) {
-    header('Location: dashboard.php');
+    header('Location: ' . (!empty($_SESSION['must_change_password']) ? 'change-password.php' : 'dashboard.php'));
     exit;
 }
 
@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errorMessage = 'Enter a valid username and password.';
         } else {
             $statement = $pdo->prepare(
-                'SELECT id, username, full_name, password_hash, role
+                'SELECT id, username, full_name, password_hash, role, must_change_password, session_version
                  FROM users
                  WHERE username = :username AND is_active = 1
                  LIMIT 1'
@@ -49,9 +49,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['username'] = $user['username'];
                 $_SESSION['full_name'] = $user['full_name'];
                 $_SESSION['role'] = $user['role'];
+                $_SESSION['must_change_password'] = (int) $user['must_change_password'] === 1;
+                $_SESSION['session_version'] = (int) $user['session_version'];
                 $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 
-                header('Location: dashboard.php');
+                header('Location: ' . (!empty($_SESSION['must_change_password']) ? 'change-password.php' : 'dashboard.php'));
                 exit;
             }
 

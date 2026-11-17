@@ -5,14 +5,13 @@ $currentPage = $currentPage ?? '';
 $navigationItems = [
     ['page' => 'dashboard', 'label' => 'Dashboard', 'icon' => 'dashboard', 'href' => 'dashboard.php'],
     ['page' => 'orders', 'label' => 'Orders', 'icon' => 'receipt_long', 'href' => 'orders.php'],
-    ['page' => 'new-order', 'label' => 'New Order', 'icon' => 'add_circle', 'href' => 'new-order.php'],
-    ['page' => 'kitchen-display', 'label' => 'Kitchen Display', 'icon' => 'skillet', 'href' => 'kitchen.php'],
+    ['page' => 'new-order', 'label' => 'New Order', 'icon' => 'add_circle', 'href' => 'new-order.php', 'roles' => ROLE_POLICY_ORDER_ENTRY],
+    ['page' => 'kitchen-display', 'label' => 'Kitchen Display', 'icon' => 'skillet', 'href' => 'kitchen.php', 'roles' => ROLE_POLICY_KITCHEN_OPERATIONS],
     ['page' => 'inventory', 'label' => 'Inventory', 'icon' => 'inventory_2', 'href' => 'inventory.php'],
+    ['page' => 'cashier-closeout', 'label' => 'Cashier Closeout', 'icon' => 'point_of_sale', 'href' => 'cashier-closeout.php', 'roles' => ROLE_POLICY_ORDER_ENTRY],
+    ['page' => 'menu-management', 'label' => 'Menu Management', 'icon' => 'restaurant_menu', 'href' => 'menu-management.php', 'roles' => ROLE_POLICY_ADMIN],
+    ['page' => 'user-management', 'label' => 'User Management', 'icon' => 'manage_accounts', 'href' => 'user-management.php', 'roles' => ROLE_POLICY_ADMIN],
 ];
-if (($_SESSION['role'] ?? '') === 'admin') {
-    $navigationItems[] = ['page' => 'menu-management', 'label' => 'Menu Management', 'icon' => 'restaurant_menu', 'href' => 'menu-management.php'];
-    $navigationItems[] = ['page' => 'user-management', 'label' => 'User Management', 'icon' => 'manage_accounts', 'href' => 'user-management.php'];
-}
 ?>
 <aside class="fixed left-0 top-0 z-50 flex h-full w-72 flex-col bg-surface-container-low shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
     <div class="flex h-20 items-center gap-2 bg-surface-container-low px-6">
@@ -29,6 +28,7 @@ if (($_SESSION['role'] ?? '') === 'admin') {
     <div class="px-4 py-2"><div class="h-px bg-surface-container-highest"></div></div>
     <nav class="flex flex-1 flex-col gap-1 overflow-y-auto px-4 py-2">
         <?php foreach ($navigationItems as $item): ?>
+            <?php if (isset($item['roles']) && !role_is_allowed($item['roles'])) { continue; } ?>
             <?php $isActive = $currentPage === $item['page']; ?>
             <a
                 aria-current="<?= $isActive ? 'page' : 'false' ?>"

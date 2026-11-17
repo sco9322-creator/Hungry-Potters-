@@ -4,7 +4,10 @@ CREATE DATABASE IF NOT EXISTS hungry_potters
 
 USE hungry_potters;
 
--- For existing installations, apply database/migrations/20261031_management_takeout.sql.
+-- For existing installations, follow the ordered upgrade steps in README.md.
+-- Before deploying the matching application code, also apply
+-- database/migrations/20261117_require_seed_password_reset.sql, then
+-- database/migrations/20261117_user_session_version.sql to existing installations.
 
 CREATE TABLE IF NOT EXISTS users (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -13,6 +16,8 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255) NOT NULL,
     role ENUM('admin', 'cashier', 'kitchen') NOT NULL,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
+    must_change_password TINYINT(1) NOT NULL DEFAULT 0,
+    session_version INT UNSIGNED NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
@@ -70,9 +75,9 @@ CREATE TABLE IF NOT EXISTS menu_recipes (
 
 CREATE TABLE IF NOT EXISTS orders (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    order_number VARCHAR(20) NOT NULL UNIQUE,
+    order_number VARCHAR(32) NOT NULL UNIQUE,
     slip_number VARCHAR(32) DEFAULT NULL UNIQUE,
-    queue_number INT UNSIGNED NOT NULL UNIQUE,
+    queue_number INT UNSIGNED NOT NULL,
     order_type ENUM('dine_in', 'takeout', 'delivery') NOT NULL,
     location VARCHAR(100) DEFAULT NULL,
     status ENUM('placed', 'preparing', 'completed', 'cancelled')
@@ -86,17 +91,30 @@ CREATE TABLE IF NOT EXISTS orders (
     started_at DATETIME DEFAULT NULL,
     completed_at DATETIME DEFAULT NULL,
     cancelled_at DATETIME DEFAULT NULL,
+    cancelled_by INT UNSIGNED DEFAULT NULL,
+    cancel_reason VARCHAR(255) DEFAULT NULL,
+    inventory_restored TINYINT(1) NOT NULL DEFAULT 0,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         ON UPDATE CURRENT_TIMESTAMP,
+    business_date DATE GENERATED ALWAYS AS (DATE(created_at)) STORED,
     CONSTRAINT fk_orders_user
         FOREIGN KEY (created_by) REFERENCES users(id)
         ON DELETE SET NULL,
+    CONSTRAINT fk_orders_cancelled_by
+        FOREIGN KEY (cancelled_by) REFERENCES users(id)
+        ON DELETE SET NULL,
+    UNIQUE KEY uq_orders_business_date_queue_number (business_date, queue_number),
     INDEX idx_orders_status_created (status, created_at),
     INDEX idx_orders_created_at (created_at)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS order_slip_counters (
     slip_date DATE NOT NULL PRIMARY KEY,
+    last_number INT UNSIGNED NOT NULL DEFAULT 0
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS order_queue_counters (
+    business_date DATE NOT NULL PRIMARY KEY,
     last_number INT UNSIGNED NOT NULL DEFAULT 0
 ) ENGINE=InnoDB;
 
@@ -125,7 +143,13 @@ CREATE TABLE IF NOT EXISTS inventory_movements (
     inventory_item_id INT UNSIGNED NOT NULL,
     order_id INT UNSIGNED DEFAULT NULL,
     changed_by INT UNSIGNED DEFAULT NULL,
-    movement_type ENUM('order_deduction', 'restock', 'manual_adjustment') NOT NULL,
+    movement_type ENUM(
+        'order_deduction',
+        'restock',
+        'manual_adjustment',
+        'cancellation_restore',
+        'waste'
+    ) NOT NULL,
     quantity_change DECIMAL(10, 2) NOT NULL,
     quantity_before DECIMAL(10, 2) NOT NULL,
     quantity_after DECIMAL(10, 2) NOT NULL,
@@ -160,12 +184,109 @@ CREATE TABLE IF NOT EXISTS order_status_history (
     INDEX idx_order_status_history_order (order_id, changed_at)
 ) ENGINE=InnoDB;
 
--- Demo password for all three accounts is: password
--- Change demo credentials before using this system beyond a local test.
-INSERT IGNORE INTO users (id, username, full_name, password_hash, role) VALUES
-    (1, 'admin', 'Hungry Potters Admin', '$2y$10$GcIr8FqWdQvHiD/s.RIyIu9CMU3jrcF.khL131SBrQdP3pC2/ByZS', 'admin'),
-    (2, 'cashier', 'Sarah M.', '$2y$10$GcIr8FqWdQvHiD/s.RIyIu9CMU3jrcF.khL131SBrQdP3pC2/ByZS', 'cashier'),
-    (3, 'kitchen', 'Kitchen Staff', '$2y$10$GcIr8FqWdQvHiD/s.RIyIu9CMU3jrcF.khL131SBrQdP3pC2/ByZS', 'kitchen');
+CREATE TABLE IF NOT EXISTS order_payments (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    order_id INT UNSIGNED NOT NULL,
+    entry_type ENUM('payment', 'refund', 'void') NOT NULL,
+    related_payment_id BIGINT UNSIGNED DEFAULT NULL,
+    method ENUM('cash', 'ewallet') NOT NULL,
+    amount DECIMAL(10, 2) UNSIGNED NOT NULL,
+    tendered_amount DECIMAL(10, 2) UNSIGNED DEFAULT NULL,
+    change_amount DECIMAL(10, 2) UNSIGNED NOT NULL DEFAULT 0,
+    reference_code VARCHAR(100) DEFAULT NULL,
+    reason VARCHAR(255) DEFAULT NULL,
+    recorded_by INT UNSIGNED DEFAULT NULL,
+    recorded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    business_date DATE GENERATED ALWAYS AS (DATE(recorded_at)) STORED,
+    CONSTRAINT fk_order_payments_order
+        FOREIGN KEY (order_id) REFERENCES orders(id)
+        ON DELETE RESTRICT,
+    CONSTRAINT fk_order_payments_related
+        FOREIGN KEY (related_payment_id, order_id)
+        REFERENCES order_payments(id, order_id)
+        ON DELETE RESTRICT,
+    CONSTRAINT fk_order_payments_user
+        FOREIGN KEY (recorded_by) REFERENCES users(id)
+        ON DELETE SET NULL,
+    CONSTRAINT chk_order_payments_amount CHECK (amount > 0),
+    CONSTRAINT chk_order_payments_cash CHECK (
+        (entry_type = 'payment' AND method = 'cash'
+            AND tendered_amount IS NOT NULL
+            AND tendered_amount >= amount
+            AND change_amount = tendered_amount - amount)
+        OR (entry_type = 'payment' AND method = 'ewallet'
+            AND tendered_amount IS NULL AND change_amount = 0)
+        OR (entry_type IN ('refund', 'void')
+            AND related_payment_id IS NOT NULL
+            AND tendered_amount IS NULL AND change_amount = 0)
+    ),
+    CONSTRAINT chk_order_payments_parent CHECK (
+        (entry_type = 'payment' AND related_payment_id IS NULL)
+        OR (entry_type IN ('refund', 'void') AND related_payment_id IS NOT NULL)
+    ),
+    CONSTRAINT chk_order_payments_reason CHECK (
+        entry_type = 'payment' OR (reason IS NOT NULL AND CHAR_LENGTH(TRIM(reason)) > 0)
+    ),
+    UNIQUE KEY uq_order_payments_id_order (id, order_id),
+    INDEX idx_order_payments_order_date (order_id, recorded_at),
+    INDEX idx_order_payments_cashier_date (recorded_by, business_date),
+    INDEX idx_order_payments_related (related_payment_id, order_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS cashier_shifts (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    business_date DATE NOT NULL,
+    cashier_id INT UNSIGNED NOT NULL,
+    opening_float DECIMAL(10, 2) UNSIGNED NOT NULL,
+    opened_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    opened_by INT UNSIGNED DEFAULT NULL,
+    closed_at DATETIME DEFAULT NULL,
+    cash_expected DECIMAL(10, 2) DEFAULT NULL,
+    cash_counted DECIMAL(10, 2) DEFAULT NULL,
+    cash_variance DECIMAL(10, 2) DEFAULT NULL,
+    closed_by INT UNSIGNED DEFAULT NULL,
+    CONSTRAINT fk_cashier_shifts_cashier
+        FOREIGN KEY (cashier_id) REFERENCES users(id)
+        ON DELETE RESTRICT,
+    CONSTRAINT fk_cashier_shifts_opened_by
+        FOREIGN KEY (opened_by) REFERENCES users(id)
+        ON DELETE SET NULL,
+    CONSTRAINT fk_cashier_shifts_closed_by
+        FOREIGN KEY (closed_by) REFERENCES users(id)
+        ON DELETE SET NULL,
+    CONSTRAINT uq_cashier_shifts_date_cashier UNIQUE (business_date, cashier_id),
+    CONSTRAINT chk_cashier_shifts_closeout CHECK (
+        (closed_at IS NULL AND cash_expected IS NULL
+            AND cash_counted IS NULL AND cash_variance IS NULL
+            AND closed_by IS NULL)
+        OR (closed_at IS NOT NULL AND cash_expected IS NOT NULL
+            AND cash_counted IS NOT NULL AND cash_variance IS NOT NULL
+            AND closed_by IS NOT NULL)
+    ),
+    INDEX idx_cashier_shifts_cashier_date (cashier_id, business_date)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS notification_log (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    type VARCHAR(32) NOT NULL,
+    message TEXT NOT NULL,
+    status ENUM('queued', 'sent', 'failed') NOT NULL DEFAULT 'queued',
+    error_message TEXT DEFAULT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    sent_at TIMESTAMP NULL DEFAULT NULL,
+    PRIMARY KEY (id),
+    INDEX idx_notification_log_queue (status, created_at)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+-- Seeded accounts are required to choose a unique password at first sign-in.
+INSERT IGNORE INTO users
+    (id, username, full_name, password_hash, role, must_change_password)
+VALUES
+    (1, 'admin', 'Hungry Potters Admin', '$2y$10$GcIr8FqWdQvHiD/s.RIyIu9CMU3jrcF.khL131SBrQdP3pC2/ByZS', 'admin', 1),
+    (2, 'cashier', 'Sarah M.', '$2y$10$GcIr8FqWdQvHiD/s.RIyIu9CMU3jrcF.khL131SBrQdP3pC2/ByZS', 'cashier', 1),
+    (3, 'kitchen', 'Kitchen Staff', '$2y$10$GcIr8FqWdQvHiD/s.RIyIu9CMU3jrcF.khL131SBrQdP3pC2/ByZS', 'kitchen', 1);
 
 INSERT IGNORE INTO categories (id, name, category_type) VALUES
     (1, 'Silog Meals', 'menu'),
@@ -241,6 +362,12 @@ VALUES
      DATE_SUB(NOW(), INTERVAL 3 MINUTE), NULL, NULL, NULL),
     (16, 'ORD-0016', 16, 'takeout', 'Bag #12', 'placed', 295.00, 295.00, NULL, 2,
      DATE_SUB(NOW(), INTERVAL 1 MINUTE), NULL, NULL, NULL);
+
+INSERT INTO order_queue_counters (business_date, last_number)
+SELECT business_date, MAX(queue_number)
+FROM orders
+GROUP BY business_date
+ON DUPLICATE KEY UPDATE last_number = GREATEST(last_number, VALUES(last_number));
 
 INSERT IGNORE INTO order_items
     (id, order_id, menu_item_id, item_name, quantity, unit_price, line_total, status)

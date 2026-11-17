@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/includes/auth.php';
-require_role(['admin']);
+require_role(ROLE_POLICY_ADMIN);
 require_once __DIR__ . '/config/db.php';
 
 $flashMessage = $_SESSION['menu_message'] ?? '';

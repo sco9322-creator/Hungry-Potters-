@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../includes/auth.php';
-require_role(['admin', 'kitchen']);
+require_role(ROLE_POLICY_KITCHEN_OPERATIONS);
 require_once __DIR__ . '/../config/db.php';
 
 header('Content-Type: application/json; charset=utf-8');

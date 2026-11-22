@@ -194,6 +194,12 @@ From PowerShell, run the health check and pass the project path:
 
 Adjust the path if XAMPP or the project is installed elsewhere.
 
+If the app is served at a different URL, pass `-BaseUrl`, for example:
+
+```powershell
+.\scripts\check-health.ps1 -ProjectPath "C:\xampp_jaka\htdocs\Clone\Hungry-Potters-\hungry-potters" -BaseUrl "http://localhost/restaurant"
+```
+
 ## Troubleshooting
 
 ### MySQL/MariaDB will not start

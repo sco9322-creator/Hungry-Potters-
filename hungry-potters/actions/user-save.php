@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/password-policy.php';
 require_role(ROLE_POLICY_ADMIN);
 require_once __DIR__ . '/../config/db.php';
 
@@ -92,10 +93,10 @@ if (
     $username === '' || strlen($username) > 50
     || $fullName === '' || strlen($fullName) > 100
     || !in_array($role, ['admin', 'cashier', 'kitchen'], true)
-    || ($password !== '' && (strlen($password) < 8 || strlen($password) > 72))
+    || ($password !== '' && !password_meets_policy($password))
     || ($userId === null && $password === '')
 ) {
-    user_management_redirect('Enter a valid name, username, role, and password (at least 8 characters for new or reset passwords).', 'error');
+    user_management_redirect('Enter a valid name, username, role, and password (at least 12 characters, maximum 72 UTF-8 bytes).', 'error');
 }
 
 try {

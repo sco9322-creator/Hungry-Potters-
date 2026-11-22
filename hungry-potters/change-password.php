@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/includes/password-policy.php';
 require_login();
 
 if (empty($_SESSION['must_change_password'])) {
@@ -25,22 +26,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $currentPassword = $_POST['current_password'] ?? null;
         $newPassword = $_POST['new_password'] ?? null;
         $confirmPassword = $_POST['confirm_password'] ?? null;
-        $newPasswordCharacterCount = is_string($newPassword)
-            ? preg_match_all('/./us', $newPassword)
-            : false;
-
         if (
             !is_string($currentPassword)
             || $currentPassword === ''
             || strlen($currentPassword) > 255
             || !is_string($newPassword)
-            || $newPasswordCharacterCount === false
-            || $newPasswordCharacterCount < 12
-            || strlen($newPassword) > 72
+            || !password_meets_policy($newPassword)
             || !is_string($confirmPassword)
             || $newPassword !== $confirmPassword
         ) {
-            $errorMessage = 'Enter your current password and a matching new password of at least 12 characters (maximum 72 bytes).';
+            $errorMessage = 'Enter your current password and a matching new password of at least 12 characters (maximum 72 UTF-8 bytes).';
         } else {
             $statement = $pdo->prepare(
                 'SELECT password_hash

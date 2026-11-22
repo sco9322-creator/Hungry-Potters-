@@ -184,20 +184,20 @@ require __DIR__ . '/includes/header.php';
             </label>
             <label class="flex flex-col gap-1 font-label-md text-on-surface-variant sm:col-span-2" data-initial-password-section>Initial password
                 <span class="flex h-11 overflow-hidden rounded-lg bg-surface-container-low focus-within:ring-2 focus-within:ring-primary-container">
-                    <input autocomplete="new-password" class="min-w-0 flex-1 bg-transparent px-3 text-on-surface outline-none" data-initial-password-input minlength="8" maxlength="72" name="password" required type="password">
+                    <input autocomplete="new-password" class="min-w-0 flex-1 bg-transparent px-3 text-on-surface outline-none" data-initial-password-input minlength="12" maxlength="72" name="password" required type="password">
                     <button aria-label="Show password" class="flex w-11 shrink-0 items-center justify-center text-on-surface-variant hover:text-primary" data-toggle-password type="button">
                         <svg aria-hidden="true" class="h-5 w-5" data-eye-show fill="none" viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"/><circle cx="12" cy="12" r="2.5" stroke="currentColor" stroke-width="1.7"/></svg>
                         <svg aria-hidden="true" class="hidden h-5 w-5" data-eye-hide fill="none" viewBox="0 0 24 24"><path d="m3 3 18 18M10.6 6.2A10.7 10.7 0 0 1 12 6c6 0 9.5 6 9.5 6a16.5 16.5 0 0 1-3.1 3.6M6.2 6.2C3.9 7.7 2.5 12 2.5 12s3.5 6 9.5 6c1 0 1.9-.2 2.7-.5M9.9 9.9a3 3 0 0 0 4.2 4.2" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"/></svg>
                     </button>
                 </span>
-                <span class="font-label-sm text-on-surface-variant" data-password-help>At least 8 characters.</span>
+                <span class="font-label-sm text-on-surface-variant" data-password-help>At least 12 characters; maximum 72 UTF-8 bytes.</span>
             </label>
             <section class="hidden rounded-xl border border-surface-container-high bg-surface-container-low p-4 sm:col-span-2" data-reset-password-section>
                 <h3 class="font-body-md-bold text-body-md-bold text-primary">Reset password</h3>
                 <p class="mt-1 font-label-md text-on-surface-variant">Leave blank to keep the current password.</p>
                 <label class="mt-3 flex flex-col gap-1 font-label-md text-on-surface-variant">New password
                     <span class="flex h-11 overflow-hidden rounded-lg bg-surface-container-lowest focus-within:ring-2 focus-within:ring-primary-container">
-                        <input autocomplete="new-password" class="min-w-0 flex-1 bg-transparent px-3 text-on-surface outline-none" data-reset-password-input disabled minlength="8" maxlength="72" name="password" type="password">
+                        <input autocomplete="new-password" class="min-w-0 flex-1 bg-transparent px-3 text-on-surface outline-none" data-reset-password-input disabled minlength="12" maxlength="72" name="password" type="password">
                         <button aria-label="Show password" class="flex w-11 shrink-0 items-center justify-center text-on-surface-variant hover:text-primary" data-toggle-password type="button">
                             <svg aria-hidden="true" class="h-5 w-5" data-eye-show fill="none" viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"/><circle cx="12" cy="12" r="2.5" stroke="currentColor" stroke-width="1.7"/></svg>
                             <svg aria-hidden="true" class="hidden h-5 w-5" data-eye-hide fill="none" viewBox="0 0 24 24"><path d="m3 3 18 18M10.6 6.2A10.7 10.7 0 0 1 12 6c6 0 9.5 6 9.5 6a16.5 16.5 0 0 1-3.1 3.6M6.2 6.2C3.9 7.7 2.5 12 2.5 12s3.5 6 9.5 6c1 0 1.9-.2 2.7-.5M9.9 9.9a3 3 0 0 0 4.2 4.2" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"/></svg>

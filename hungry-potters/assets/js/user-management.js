@@ -42,7 +42,7 @@
             resetPasswordInput.required = false;
         }
         if (helpText) {
-            helpText.textContent = isAdd ? 'At least 8 characters.' : 'Leave blank to keep the current password.';
+            helpText.textContent = isAdd ? 'At least 12 characters; maximum 72 UTF-8 bytes.' : 'Leave blank to keep the current password.';
         }
     };
 

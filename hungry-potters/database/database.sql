@@ -7,7 +7,8 @@ USE hungry_potters;
 -- For existing installations, follow the ordered upgrade steps in README.md.
 -- Before deploying the matching application code, also apply
 -- database/migrations/20261117_require_seed_password_reset.sql, then
--- database/migrations/20261117_user_session_version.sql to existing installations.
+-- database/migrations/20261117_user_session_version.sql, then
+-- database/migrations/20261122_login_rate_limiting.sql to older installations.
 
 CREATE TABLE IF NOT EXISTS users (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -19,6 +20,15 @@ CREATE TABLE IF NOT EXISTS users (
     must_change_password TINYINT(1) NOT NULL DEFAULT 0,
     session_version INT UNSIGNED NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS login_failures (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL,
+    ip_address VARBINARY(16) NOT NULL,
+    attempted_at DATETIME NOT NULL,
+    INDEX idx_login_failures_username_ip_time (username, ip_address, attempted_at),
+    INDEX idx_login_failures_ip_time (ip_address, attempted_at)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS categories (

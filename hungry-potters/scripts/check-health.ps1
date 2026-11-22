@@ -72,6 +72,10 @@ $dbExists = $dbParts.Count -eq 2 -and $dbParts[0] -eq '1'
 $dbHasTables = $dbExists -and [int]$dbParts[1] -gt 0
 Report-Check 'hungry_potters exists and has tables' $dbHasTables 'Start MySQL, then import database/database.sql or a verified database backup.'
 
+$loginFailuresTable = Invoke-RootQuery "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'hungry_potters' AND TABLE_NAME = 'login_failures';"
+$loginFailuresTableExists = $loginFailuresTable -and [string](@($loginFailuresTable)[-1]) -eq '1'
+Report-Check 'login_failures table exists for login rate limiting' $loginFailuresTableExists 'For an older database, apply database/migrations/20261122_login_rate_limiting.sql before deploying the matching application code.'
+
 $grants = Invoke-RootQuery 'SHOW GRANTS FOR ''hungry_potters_app''@''localhost'';'
 $grantLines = @($grants | ForEach-Object { ([string]$_).Replace([string][char]96, '').Replace([string][char]39, '') } | Where-Object { $_ -match '^GRANT ' })
 $schemaGrant = @($grantLines | Where-Object { $_ -match '^GRANT (.+?) ON hungry_potters\.\* TO hungry_potters_app@localhost' })

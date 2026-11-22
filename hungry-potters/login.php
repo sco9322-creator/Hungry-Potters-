@@ -34,32 +34,109 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ) {
             $errorMessage = 'Enter a valid username and password.';
         } else {
-            $statement = $pdo->prepare(
-                'SELECT id, username, full_name, password_hash, role, must_change_password, session_version
-                 FROM users
-                 WHERE username = :username AND is_active = 1
-                 LIMIT 1'
-            );
-            $statement->execute(['username' => $username]);
-            $user = $statement->fetch();
-
-            if ($user && password_verify($password, $user['password_hash'])) {
-                session_regenerate_id(true);
-                $_SESSION['user_id'] = (int) $user['id'];
-                $_SESSION['username'] = $user['username'];
-                $_SESSION['full_name'] = $user['full_name'];
-                $_SESSION['role'] = $user['role'];
-                $_SESSION['must_change_password'] = (int) $user['must_change_password'] === 1;
-                $_SESSION['session_version'] = (int) $user['session_version'];
-                $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-                $_SESSION['auth_started_at'] = time();
-                $_SESSION['auth_last_activity'] = time();
-
-                header('Location: ' . (!empty($_SESSION['must_change_password']) ? 'change-password.php' : 'dashboard.php'));
-                exit;
+            // Use the direct client address. Do not trust X-Forwarded-For unless
+            // a trusted proxy has been explicitly configured.
+            $remoteAddress = $_SERVER['REMOTE_ADDR'] ?? '';
+            $packedIp = is_string($remoteAddress) ? inet_pton($remoteAddress) : false;
+            if ($packedIp === false) {
+                error_log('Login rate limiting could not parse REMOTE_ADDR; using the fixed placeholder.');
+                $packedIp = inet_pton('::');
             }
 
-            $errorMessage = 'The username or password is incorrect.';
+            $isLockedOut = false;
+            try {
+                // Delete at most 100 expired events on each valid login POST.
+                $pdo->exec(
+                    'DELETE FROM login_failures
+                     WHERE attempted_at < UTC_TIMESTAMP() - INTERVAL 15 MINUTE
+                     ORDER BY attempted_at ASC
+                     LIMIT 100'
+                );
+
+                $pairCount = $pdo->prepare(
+                    'SELECT COUNT(*)
+                     FROM login_failures
+                     WHERE username = :username
+                       AND ip_address = :ip_address
+                       AND attempted_at >= UTC_TIMESTAMP() - INTERVAL 15 MINUTE'
+                );
+                $pairCount->execute([
+                    'username' => $username,
+                    'ip_address' => $packedIp,
+                ]);
+
+                $ipCount = $pdo->prepare(
+                    'SELECT COUNT(*)
+                     FROM login_failures
+                     WHERE ip_address = :ip_address
+                       AND attempted_at >= UTC_TIMESTAMP() - INTERVAL 15 MINUTE'
+                );
+                $ipCount->execute(['ip_address' => $packedIp]);
+
+                $isLockedOut = (int) $pairCount->fetchColumn() >= 5
+                    || (int) $ipCount->fetchColumn() >= 30;
+            } catch (Throwable $exception) {
+                error_log('Login rate-limit query failed: ' . $exception->getMessage());
+            }
+
+            if ($isLockedOut) {
+                // Same response as an unknown username or wrong password.
+                $errorMessage = 'The username or password is incorrect.';
+            } else {
+                $statement = $pdo->prepare(
+                    'SELECT id, username, full_name, password_hash, role, must_change_password, session_version
+                     FROM users
+                     WHERE username = :username AND is_active = 1
+                     LIMIT 1'
+                );
+                $statement->execute(['username' => $username]);
+                $user = $statement->fetch();
+
+                if ($user && password_verify($password, $user['password_hash'])) {
+                    try {
+                        // A successful login clears failures for this username and IP.
+                        $clearFailures = $pdo->prepare(
+                            'DELETE FROM login_failures
+                             WHERE username = :username AND ip_address = :ip_address'
+                        );
+                        $clearFailures->execute([
+                            'username' => $username,
+                            'ip_address' => $packedIp,
+                        ]);
+                    } catch (Throwable $exception) {
+                        error_log('Login rate-limit clear failed: ' . $exception->getMessage());
+                    }
+
+                    session_regenerate_id(true);
+                    $_SESSION['user_id'] = (int) $user['id'];
+                    $_SESSION['username'] = $user['username'];
+                    $_SESSION['full_name'] = $user['full_name'];
+                    $_SESSION['role'] = $user['role'];
+                    $_SESSION['must_change_password'] = (int) $user['must_change_password'] === 1;
+                    $_SESSION['session_version'] = (int) $user['session_version'];
+                    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+                    $_SESSION['auth_started_at'] = time();
+                    $_SESSION['auth_last_activity'] = time();
+
+                    header('Location: ' . (!empty($_SESSION['must_change_password']) ? 'change-password.php' : 'dashboard.php'));
+                    exit;
+                }
+
+                try {
+                    $recordFailure = $pdo->prepare(
+                        'INSERT INTO login_failures (username, ip_address, attempted_at)
+                         VALUES (:username, :ip_address, UTC_TIMESTAMP())'
+                    );
+                    $recordFailure->execute([
+                        'username' => $username,
+                        'ip_address' => $packedIp,
+                    ]);
+                } catch (Throwable $exception) {
+                    error_log('Login rate-limit insert failed: ' . $exception->getMessage());
+                }
+
+                $errorMessage = 'The username or password is incorrect.';
+            }
         }
     }
 }

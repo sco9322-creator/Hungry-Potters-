@@ -10,8 +10,26 @@ require_once __DIR__ . '/../includes/telegram.php';
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
+$queueLockAcquired = false;
+
+function release_order_queue_lock(): void
+{
+    global $pdo, $queueLockAcquired;
+    if (!$queueLockAcquired) {
+        return;
+    }
+
+    $queueLockAcquired = false;
+    try {
+        $pdo->query("SELECT RELEASE_LOCK('hungry_potters_order_queue')");
+    } catch (Throwable $exception) {
+        error_log('Order queue lock release failed: ' . $exception->getMessage());
+    }
+}
+
 function send_order_place_response(int $statusCode, array $payload): never
 {
+    release_order_queue_lock();
     http_response_code($statusCode);
     echo json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
     exit;
@@ -97,6 +115,7 @@ $queueLock = $pdo->query("SELECT GET_LOCK('hungry_potters_order_queue', 5)")->fe
 if ((int) $queueLock !== 1) {
     send_order_place_response(503, ['success' => false, 'message' => 'The order queue is busy. Please try placing the order again.']);
 }
+$queueLockAcquired = true;
 
 $lowStockNotifications = [];
 $pdo->beginTransaction();
@@ -308,12 +327,11 @@ try {
         'user_id' => $_SESSION['user_id'],
     ]);
     $pdo->commit();
-    $pdo->query("SELECT RELEASE_LOCK('hungry_potters_order_queue')");
+    release_order_queue_lock();
 } catch (Throwable $exception) {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }
-    $pdo->query("SELECT RELEASE_LOCK('hungry_potters_order_queue')");
     error_log('Order placement failed: ' . $exception->getMessage());
     send_order_place_response(500, ['success' => false, 'message' => 'The order could not be placed. Please try again.']);
 }

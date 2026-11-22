@@ -52,6 +52,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['must_change_password'] = (int) $user['must_change_password'] === 1;
                 $_SESSION['session_version'] = (int) $user['session_version'];
                 $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+                $_SESSION['auth_started_at'] = time();
+                $_SESSION['auth_last_activity'] = time();
 
                 header('Location: ' . (!empty($_SESSION['must_change_password']) ? 'change-password.php' : 'dashboard.php'));
                 exit;

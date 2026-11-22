@@ -56,6 +56,21 @@ function require_login(): void
         exit;
     }
 
+    $now = time();
+    $startedAt = $_SESSION['auth_started_at'] ?? null;
+    $lastActivity = $_SESSION['auth_last_activity'] ?? null;
+    if (
+        !is_int($startedAt)
+        || !is_int($lastActivity)
+        || $now - $lastActivity > 1800
+        || $now - $startedAt > 43200
+    ) {
+        auth_clear_session();
+        header('Location: ' . $basePath . '/login.php');
+        exit;
+    }
+    $_SESSION['auth_last_activity'] = $now;
+
     global $pdo;
     require_once __DIR__ . '/../config/db.php';
 

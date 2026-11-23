@@ -133,3 +133,27 @@ html {
         padding: 1rem;
     }
 }
+
+aside[data-role="admin"] {
+    --sidebar: 53 41 55;
+    --sidebar-active: 115 77 105;
+    --sidebar-accent: 198 165 158;
+    --sidebar-text: 241 233 238;
+    --sidebar-panel: 72 55 70;
+}
+
+aside[data-role="cashier"] {
+    --sidebar: 35 52 64;
+    --sidebar-active: 66 101 123;
+    --sidebar-accent: 160 185 197;
+    --sidebar-text: 230 238 242;
+    --sidebar-panel: 48 70 83;
+}
+
+aside[data-role="kitchen"] {
+    --sidebar: 58 45 37;
+    --sidebar-active: 138 90 59;
+    --sidebar-accent: 209 167 126;
+    --sidebar-text: 244 236 228;
+    --sidebar-panel: 76 58 47;
+}

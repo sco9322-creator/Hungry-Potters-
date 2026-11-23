@@ -4,6 +4,11 @@ module.exports = {
     theme: {
         extend: {
             colors: {
+                'sidebar': 'rgb(var(--sidebar) / <alpha-value>)',
+                'sidebar-active': 'rgb(var(--sidebar-active) / <alpha-value>)',
+                'sidebar-accent': 'rgb(var(--sidebar-accent) / <alpha-value>)',
+                'sidebar-text': 'rgb(var(--sidebar-text) / <alpha-value>)',
+                'sidebar-panel': 'rgb(var(--sidebar-panel) / <alpha-value>)',
                 'inverse-primary': '#aecdc4',
                 'on-tertiary': '#ffffff',
                 surface: '#f3fbf6',

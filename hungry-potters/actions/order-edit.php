@@ -5,7 +5,6 @@ require_once __DIR__ . '/../includes/auth.php';
 require_role(ROLE_POLICY_ORDER_ENTRY);
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../includes/payments.php';
-require_once __DIR__ . '/../includes/telegram.php';
 
 function order_edit_redirect(string $message, string $type, int $orderId = 0, string $returnQuery = ''): never
 {
@@ -565,9 +564,6 @@ try {
     order_edit_redirect('The order could not be updated. No changes were made. Please refresh and try again.', 'error', $orderId, $returnQuery);
 }
 
-if ($lowStockNotifications !== []) {
-    telegram_notify($pdo, 'low_stock', ['ingredients' => $lowStockNotifications]);
-}
 order_edit_redirect(
     'Order ' . $order['order_number'] . ' was updated. Ingredient stock and total were adjusted.',
     'success',

@@ -5,7 +5,6 @@ require_once __DIR__ . '/../includes/auth.php';
 require_role(ROLE_POLICY_ORDER_ENTRY);
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../includes/order-queue.php';
-require_once __DIR__ . '/../includes/telegram.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -334,17 +333,6 @@ try {
     }
     error_log('Order placement failed: ' . $exception->getMessage());
     send_order_place_response(500, ['success' => false, 'message' => 'The order could not be placed. Please try again.']);
-}
-
-if ($lowStockNotifications !== []) {
-    telegram_notify($pdo, 'low_stock', ['ingredients' => $lowStockNotifications]);
-}
-if ($orderType === 'takeout') {
-    telegram_notify($pdo, 'takeout_order', [
-        'slip_number' => (string) $slipNumber,
-        'items' => $menuOrderItems,
-        'total' => number_format($total, 2, '.', ''),
-    ]);
 }
 
 send_order_place_response(201, [

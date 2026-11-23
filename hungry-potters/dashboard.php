@@ -169,15 +169,7 @@ require __DIR__ . '/includes/header.php';
                     <span>+ New Order</span>
                 </a>
             <?php endif; ?>
-            <?php if (($_SESSION['role'] ?? '') === 'admin'): ?>
-                <form action="actions/telegram-test.php" method="post">
-                    <input name="csrf_token" type="hidden" value="<?= h(csrf_token()) ?>">
-                    <button class="flex min-h-12 items-center justify-center gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest px-4 font-body-md-bold text-body-md-bold text-primary transition-colors hover:bg-surface-container" type="submit">
-                        <span class="material-symbols-outlined text-[20px]">send</span>
-                        <span>Send test message</span>
-                    </button>
-                </form>
-            <?php endif; ?>
+
         </div>
     </section>
 

@@ -4,7 +4,6 @@ declare(strict_types=1);
 require_once __DIR__ . '/../includes/auth.php';
 require_role(ROLE_POLICY_KITCHEN_OPERATIONS);
 require_once __DIR__ . '/../config/db.php';
-require_once __DIR__ . '/../includes/telegram.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -144,11 +143,4 @@ try {
 $message = $nextStatus === 'preparing'
     ? 'Order ' . $order['order_number'] . ' is now preparing.'
     : 'Order ' . $order['order_number'] . ' marked completed. Inventory was already deducted when placed.';
-if ($nextStatus === 'completed') {
-    telegram_notify($pdo, 'order_ready', [
-        'slip_number' => $order['slip_number'] !== null ? (string) $order['slip_number'] : null,
-        'order_number' => (string) $order['order_number'],
-        'queue_number' => (int) $order['queue_number'],
-    ]);
-}
 send_order_update_response(200, ['success' => true, 'message' => $message]);

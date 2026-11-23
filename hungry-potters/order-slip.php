@@ -52,9 +52,8 @@ $pageTitle = 'Takeout Order Slip';
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@100..900&amp;family=Work+Sans:wght@100..900&amp;display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="assets/js/tailwind-config.js"></script>
     <link href="assets/css/app.css" rel="stylesheet">
+    <link href="assets/css/tailwind.css" rel="stylesheet">
     <style>
         @media print {
             body { background: white !important; padding: 0 !important; }

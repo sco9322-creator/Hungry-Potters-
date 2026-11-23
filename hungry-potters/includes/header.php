@@ -18,9 +18,8 @@ $displayRole = ucfirst((string) ($_SESSION['role'] ?? 'staff'));
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@100..900&amp;family=Work+Sans:wght@100..900&amp;display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="assets/js/tailwind-config.js"></script>
     <link href="assets/css/app.css" rel="stylesheet">
+    <link href="assets/css/tailwind.css" rel="stylesheet">
 </head>
 <body class="min-h-screen bg-surface font-body-md text-on-surface antialiased">
 <?php require __DIR__ . '/sidebar.php'; ?>

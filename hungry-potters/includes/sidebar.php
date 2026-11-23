@@ -7,6 +7,7 @@ $navigationItems = [
     ['page' => 'orders', 'label' => 'Orders', 'icon' => 'receipt_long', 'href' => 'orders.php'],
     ['page' => 'new-order', 'label' => 'New Order', 'icon' => 'add_circle', 'href' => 'new-order.php', 'roles' => ROLE_POLICY_ORDER_ENTRY],
     ['page' => 'kitchen-display', 'label' => 'Kitchen Display', 'icon' => 'skillet', 'href' => 'kitchen.php', 'roles' => ROLE_POLICY_KITCHEN_OPERATIONS],
+    ['page' => 'queue-display', 'label' => 'Customer Queue', 'icon' => 'tv', 'href' => 'queue-display.php', 'roles' => ROLE_POLICY_ORDER_ENTRY, 'new_tab' => true],
     ['page' => 'inventory', 'label' => 'Inventory', 'icon' => 'inventory_2', 'href' => 'inventory.php'],
     ['page' => 'cashier-closeout', 'label' => 'Cashier Closeout', 'icon' => 'point_of_sale', 'href' => 'cashier-closeout.php', 'roles' => ROLE_POLICY_ORDER_ENTRY],
     ['page' => 'menu-management', 'label' => 'Menu Management', 'icon' => 'restaurant_menu', 'href' => 'menu-management.php', 'roles' => ROLE_POLICY_ADMIN],
@@ -34,6 +35,10 @@ $navigationItems = [
                 aria-current="<?= $isActive ? 'page' : 'false' ?>"
                 class="flex min-h-12 items-center gap-4 rounded-lg px-4 py-2 transition-colors <?= $isActive ? 'bg-primary-container font-body-md-bold text-on-primary shadow-sm' : 'font-body-md text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface' ?>"
                 href="<?= h($item['href']) ?>"
+                <?php if (!empty($item['new_tab'])): ?>
+                    target="_blank"
+                    rel="noopener noreferrer"
+                <?php endif; ?>
             >
                 <span class="material-symbols-outlined text-[22px]"><?= h($item['icon']) ?></span>
                 <span class="truncate"><?= h($item['label']) ?></span>

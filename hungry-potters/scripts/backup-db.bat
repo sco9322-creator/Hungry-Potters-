@@ -27,7 +27,7 @@ if not exist "%BACKUP_FILE%" (
 )
 for %%F in ("%BACKUP_FILE%") do set "BACKUP_SIZE=%%~zF"
 if %BACKUP_SIZE% LSS 10240 (
-    echo [%date% %time%] FAIL: Dump is smaller than 10 KB (%BACKUP_SIZE% bytes).>>"%LOG_FILE%"
+    echo [%date% %time%] FAIL: Dump is smaller than 10 KB - %BACKUP_SIZE% bytes.>>"%LOG_FILE%"
     del /q "%BACKUP_FILE%"
     exit /b 1
 )

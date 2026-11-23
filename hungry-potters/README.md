@@ -118,7 +118,7 @@ Open `http://localhost/hungry-potters/queue-display.php` on the counter TV or ta
 
 Open `http://localhost/hungry-potters/kitchen.php`. New placed orders are highlighted and announced in a banner; the browser tab title shows the placed-order count. Sound starts off. Click **Sound alerts: off** to enable sound and hear a preview. The on/off choice is remembered, but click the button once after every reload to unlock browser audio again.
 
-#### Default seed accounts
+#### Demo seed accounts
 
 | Username | Role | Notes |
 |---|---|---|
@@ -126,18 +126,64 @@ Open `http://localhost/hungry-potters/kitchen.php`. New placed orders are highli
 | `cashier` | Cashier | Must change password on first login |
 | `kitchen` | Kitchen | Must change password on first login |
 
-All seed accounts require a new password on first login before accessing the dashboard.
+These accounts exist only after importing the demo database described below. All require a new password on first login before accessing the dashboard.
 
 ## Database setup and upgrades
 
 ### New database
 
-Create the database and application account as described in Setup, then choose one of these options:
+Create the database and application account as described in Setup, then choose one installation type.
 
-- Import `database/database.sql` for a fresh installation.
-- Import a database backup made with `mysqldump`.
+#### Demo installation
 
-A backup already contains its schema. `database/database.sql` already includes the current schema and the outcomes of the migrations. **Do not run the migration scripts on a new database or on a backup that already has the current schema.**
+Import `database/database.sql` for a demo containing seed accounts, sample menu and inventory data, recipes, sample orders, and order lines. `database/database.sql` is generated from `database/schema.sql` plus `database/demo-data.sql`; do not edit it by hand.
+
+**Never import `database/database.sql` into an operational database.**
+
+#### Clean operational installation
+
+Import `database/schema.sql`. It creates the current schema without accounts, menu, inventory, recipes, orders, or other demo rows:
+
+```powershell
+cmd /c "C:\xampp_jaka\mysql\bin\mysql.exe -u root hungry_potters < database\schema.sql"
+```
+
+Then create the first administrator. The wrapper prompts for the password of the `hungry_potters_app` account created in Setup step 3, the administrator username and full name, and a unique temporary password. It does not place passwords on the command line or store them in this project:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\create-initial-admin.ps1 -DatabaseName "hungry_potters"
+```
+
+The administrator must change that temporary password at first login.
+
+The current app has no category-create or category-edit screen; a category screen does not exist yet. Before adding inventory or menu items, insert at least one category of each type directly. The category names in this SQL example are examples: replace them with the restaurant's own categories.
+
+```sql
+INSERT INTO categories (name, category_type) VALUES
+    ('Main dishes', 'menu'),
+    ('Ingredients', 'inventory');
+```
+
+Then create inventory ingredients, menu items, and recipes before taking orders.
+
+The empty-install app workflow has **not yet been tested end to end**. The schema-only import, first-admin creation, and queue-counter initialization have been tested separately in a throwaway database.
+
+#### Database source files
+
+`database/schema.sql` and `database/demo-data.sql` are the sources for the demo import. After changing either source, run:
+
+```powershell
+.\scripts\build-database-sql.ps1
+.\scripts\check-database-sql.ps1
+```
+
+The check verifies that `database/database.sql` matches the two sources while ignoring line-ending differences, and that `schema.sql` contains no `INSERT` or `REPLACE` statements.
+
+#### Backup import
+
+A `mysqldump` backup already contains its schema and data. Import it instead of either new-install SQL file.
+
+`database/schema.sql` and `database/database.sql` already include the current schema and the outcomes of the migrations. **Do not run the migration scripts on a new schema import, demo import, or backup that already has the current schema.**
 
 The SQL files target a database named `hungry_potters`. If `HP_DB_NAME` differs, select the configured database when running scripts and replace any `USE hungry_potters` statement with that database name.
 
@@ -155,9 +201,11 @@ Back up the database first. Inspect its schema and apply only the missing upgrad
 
 The numbered sequence is a practical upgrade order, but the SQL shows few dependencies between these scripts: the session-version migration must follow the password-reset migration; the other upgrades require their base tables and applicable older schema. The position of `order_cancellation.sql` in the sequence is **unverified**, as noted above. Check the live schema and apply only missing changes.
 
+database/schema.sql, database/demo-data.sql, database/database.sql, and the first-admin scripts are installation files, not migrations. For a new feature that changes the schema, add an upgrade migration for older databases, update schema.sql to the final schema, then rebuild and check database.sql.
+
 ### Other SQL scripts
 
-These scripts are not required for a new database created from `database/database.sql`:
+These scripts are not required for a new database created from `database/schema.sql`, `database/database.sql`, or a current backup:
 
 - **`database/telegram_notifications.sql`** — Creates the legacy `notification_log` table. **Safe to run twice at the table-creation level** because it uses `CREATE TABLE IF NOT EXISTS`. The current app no longer has the Telegram notification integration; this table is optional legacy support.
 - **`database/update_menu.sql`** — Updates menu categories, names, prices, descriptions, availability, and active status to the menu data in the script. It creates missing listed items and deactivates items not on that list. **Can be rerun technically**, but each run reapplies those menu values and can overwrite later menu edits or deactivate newer items. Use only when you intend to restore that menu data. Run before `update_recipes.sql`.

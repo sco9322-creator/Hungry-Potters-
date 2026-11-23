@@ -4,41 +4,9 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 require_role(ROLE_POLICY_KITCHEN_OPERATIONS);
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/kitchen-orders.php';
 
-$ordersStatement = $pdo->query(
-    "SELECT
-        orders.id,
-        orders.order_number,
-        orders.queue_number,
-        orders.order_type,
-        orders.location,
-        orders.status,
-        orders.kitchen_note,
-        orders.created_at,
-        orders.started_at,
-        orders.completed_at,
-        GROUP_CONCAT(
-            CONCAT(order_items.quantity, '× ', order_items.item_name)
-            ORDER BY order_items.id
-            SEPARATOR ', '
-        ) AS items_summary
-     FROM orders
-     LEFT JOIN order_items ON order_items.order_id = orders.id
-     WHERE orders.status IN ('placed', 'preparing', 'completed')
-     GROUP BY orders.id
-     ORDER BY
-        CASE orders.status
-            WHEN 'placed' THEN 1
-            WHEN 'preparing' THEN 2
-            ELSE 3
-        END,
-        CASE
-            WHEN orders.status = 'completed' THEN orders.completed_at
-            ELSE orders.created_at
-        END DESC
-     LIMIT 60"
-);
-$orders = $ordersStatement->fetchAll();
+$orders = fetch_kitchen_orders($pdo);
 
 $placedOrders = [];
 $preparingOrders = [];
@@ -67,6 +35,7 @@ require __DIR__ . '/includes/header.php';
     data-refresh-endpoint="api/kitchen-orders.php"
     data-refresh-seconds="5"
 >
+    <div class="kitchen-new-order-banner" data-new-order-banner role="status" aria-live="polite" hidden></div>
     <section class="mb-6 w-full rounded-xl bg-primary px-6 py-5 text-on-primary shadow-lg">
         <div class="flex flex-wrap items-center justify-between gap-4">
             <div class="flex flex-wrap items-center gap-4">
@@ -86,6 +55,14 @@ require __DIR__ . '/includes/header.php';
                 </div>
             </div>
             <div class="flex flex-wrap items-center gap-2">
+                <div class="kitchen-sound-control">
+                    <button class="kitchen-sound-toggle" data-kitchen-sound-toggle type="button" aria-pressed="false">
+                        Sound alerts: off
+                    </button>
+                    <span class="kitchen-sound-warning" data-kitchen-sound-warning hidden>
+                        Sound is locked after reload; click to unlock.
+                    </span>
+                </div>
                 <div class="flex items-center gap-2 rounded-lg border border-tertiary-fixed/30 bg-primary-container px-4 py-2 text-tertiary-fixed">
                     <span class="relative flex h-3 w-3">
                         <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-tertiary-fixed opacity-75"></span>
@@ -160,7 +137,15 @@ require __DIR__ . '/includes/header.php';
                         <?php foreach ($column['orders'] as $order): ?>
                             <?php
                             $createdTimestamp = strtotime((string) $order['created_at']);
-                            $elapsedMinutes = max(0, (int) floor((time() - $createdTimestamp) / 60));
+                            if ($order['status'] === 'completed') {
+                                $minutes = $order['duration_minutes'];
+                                $timerLabel = $minutes === 0 ? 'Took under 1 min' : "Took {$minutes} min";
+                                $timerClass = 'bg-surface-container text-on-surface-variant';
+                            } else {
+                                $minutes = max(0, (int) floor((time() - $createdTimestamp) / 60));
+                                $timerLabel = "{$minutes}m";
+                                $timerClass = $minutes >= 10 ? 'bg-error text-on-error' : 'bg-secondary-fixed text-on-secondary-fixed';
+                            }
                             $orderTypeLabel = [
                                 'dine_in' => 'Dine-In',
                                 'takeout' => 'Takeout',
@@ -174,8 +159,8 @@ require __DIR__ . '/includes/header.php';
                                         <span class="mt-1 font-label-md text-label-md font-bold text-on-surface-variant">#<?= h($order['order_number']) ?></span>
                                     </div>
                                     <div class="flex flex-col items-end gap-1">
-                                        <span class="rounded-lg px-3 py-1.5 font-mono-metric text-[20px] font-bold <?= $elapsedMinutes >= 10 && $order['status'] !== 'completed' ? 'bg-error text-on-error' : 'bg-secondary-fixed text-on-secondary-fixed' ?>">
-                                            <?= h($elapsedMinutes) ?>m
+                                        <span class="rounded-lg px-3 py-1.5 font-mono-metric text-[20px] font-bold <?= h($timerClass) ?>">
+                                            <?= h($timerLabel) ?>
                                         </span>
                                         <time class="font-label-sm text-label-sm font-semibold text-on-surface-variant" datetime="<?= h(date(DATE_ATOM, $createdTimestamp)) ?>"><?= h(date('g:i A', $createdTimestamp)) ?></time>
                                     </div>

@@ -130,6 +130,13 @@ These accounts exist only after importing the demo database described below. All
 
 ## Database setup and upgrades
 
+At New Order, review the ticket and proceed to checkout. Dine-in, takeout and prepaid delivery
+require the cashier's open shift and full payment. Confirm cash physically received, or verify
+the incoming e-wallet transfer and enter its reference. Delivery COD goes to the kitchen unpaid
+and needs no open shift until collection. Use Orders → Collect payment when money is received.
+After a connection failure, retry the same checkout in the same browser tab. Receipts in Orders
+show payments, refunds, voids and the current balance. Cash closeout includes cash retained after change.
+
 ### New database
 
 Create the database and application account as described in Setup, then choose one installation type.
@@ -200,6 +207,11 @@ Back up the database first. Inspect its schema and apply only the missing upgrad
 7. **`database/migrations/20261122_login_rate_limiting.sql`** — For upgrading an older existing database only; creates the `login_failures` table used by login rate limiting. **Safe to run twice at the table-creation level** because it uses `CREATE TABLE IF NOT EXISTS`; it does not reconcile a partially or differently defined table. It depends on no other listed migration and must be applied before deploying the matching application code.
 
 The numbered sequence is a practical upgrade order, but the SQL shows few dependencies between these scripts: the session-version migration must follow the password-reset migration; the other upgrades require their base tables and applicable older schema. The position of `order_cancellation.sql` in the sequence is **unverified**, as noted above. Check the live schema and apply only missing changes.
+
+8. **`database/migrations/20261124_pos_checkout.sql`** — For upgrading an older database only.
+   Apply before deploying integrated checkout, after the orders, payments and shift schema is present.
+   Adds nullable checkout mode, request fingerprint and unique token. The guarded additions can
+   be rerun on MariaDB 10.4; verify existing definitions if an earlier attempt was interrupted.
 
 database/schema.sql, database/demo-data.sql, database/database.sql, and the first-admin scripts are installation files, not migrations. For a new feature that changes the schema, add an upgrade migration for older databases, update schema.sql to the final schema, then rebuild and check database.sql.
 

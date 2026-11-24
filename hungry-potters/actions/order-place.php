@@ -5,6 +5,7 @@ require_once __DIR__ . '/../includes/auth.php';
 require_role(ROLE_POLICY_ORDER_ENTRY);
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../includes/order-queue.php';
+require_once __DIR__ . '/../includes/payments.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -110,15 +111,67 @@ foreach ($items as $item) {
     }
 }
 
-$queueLock = $pdo->query("SELECT GET_LOCK('hungry_potters_order_queue', 5)")->fetchColumn();
-if ((int) $queueLock !== 1) {
-    send_order_place_response(503, ['success' => false, 'message' => 'The order queue is busy. Please try placing the order again.']);
+$checkout = $payload['checkout'] ?? null;
+if (!is_array($checkout)) {
+    send_order_place_response(422, ['success' => false, 'message' => 'Review the ticket and choose a checkout method.']);
 }
-$queueLockAcquired = true;
+$token = $checkout['token'] ?? null;
+$method = $checkout['method'] ?? null;
+$confirmed = ($checkout['received'] ?? false) === true;
+$reference = is_string($checkout['reference'] ?? null) ? trim($checkout['reference']) : '';
+$quoted = is_string($checkout['total'] ?? null) ? payment_parse_amount($checkout['total']) : null;
+$tendered = is_string($checkout['tendered'] ?? null) ? payment_parse_amount($checkout['tendered']) : null;
+if (!is_string($token) || !preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/D', $token)
+    || !in_array($method, ['cash', 'ewallet', 'cod'], true) || $quoted === null || $quoted <= 0
+    || ($method === 'cod' && $orderType !== 'delivery')
+    || ($method !== 'cod' && !$confirmed)
+    || ($method === 'cash' && ($tendered === null || $tendered < $quoted))
+    || ($method === 'ewallet' && ($reference === '' || strlen($reference) > 100))) {
+    send_order_place_response(422, ['success' => false, 'message' => 'Check the payment details and confirm any money received. COD is available for delivery only.']);
+}
+$cashierId = (int) $_SESSION['user_id'];
+ksort($requestedItems, SORT_NUMERIC);
+$fingerprint = hash('sha256', json_encode([
+    $cashierId, $orderType, $location, $kitchenNote, $requestedItems,
+    $method, $quoted, $tendered, $reference, $confirmed,
+], JSON_THROW_ON_ERROR));
 
-$lowStockNotifications = [];
-$pdo->beginTransaction();
 try {
+    $queueLock = $pdo->query("SELECT GET_LOCK('hungry_potters_order_queue', 5)")->fetchColumn();
+    if ((int) $queueLock !== 1) {
+        send_order_place_response(503, ['success' => false, 'message' => 'The order queue is busy. Please try placing the order again.']);
+    }
+    $queueLockAcquired = true;
+
+    $lowStockNotifications = [];
+    $pdo->beginTransaction();
+    $lookup = $pdo->prepare('SELECT id, order_number, slip_number, queue_number, total, created_by, checkout_request_hash
+        FROM orders WHERE checkout_token = ? FOR UPDATE');
+    $lookup->execute([$token]);
+    if ($prior = $lookup->fetch()) {
+        $pdo->rollBack();
+        if ((int) $prior['created_by'] !== $cashierId || !hash_equals($prior['checkout_request_hash'], $fingerprint)) {
+            send_order_place_response(409, ['success' => false, 'message' => 'This checkout token already identifies a different ticket. Check Orders before starting another.']);
+        }
+        send_order_place_response(200, ['success' => true, 'order_id' => (int) $prior['id'],
+            'order_number' => $prior['order_number'], 'queue_number' => (int) $prior['queue_number'],
+            'slip_number' => $prior['slip_number'], 'total' => $prior['total']]);
+    }
+
+    $actor = $pdo->prepare("SELECT id FROM users WHERE id = ? AND is_active = 1 AND role IN ('cashier','admin') FOR UPDATE");
+    $actor->execute([$cashierId]);
+    if (!$actor->fetchColumn()) {
+        throw new DomainException('Sign in with an active cashier or admin account.');
+    }
+    $orderCreatedAt = (string) $pdo->query('SELECT NOW()')->fetchColumn();
+    $businessDate = substr($orderCreatedAt, 0, 10);
+    if ($method !== 'cod') {
+        $shift = $pdo->prepare('SELECT id FROM cashier_shifts WHERE cashier_id = ? AND business_date = ? AND closed_at IS NULL FOR UPDATE');
+        $shift->execute([$cashierId, $businessDate]);
+        if (!$shift->fetchColumn()) {
+            throw new DomainException('An open cashier shift is required to record this payment.');
+        }
+    }
     $menuStatement = $pdo->prepare(
         'SELECT id, name, price
          FROM menu_items
@@ -203,8 +256,9 @@ try {
         ]);
     }
 
-    $orderCreatedAt = (string) $pdo->query('SELECT NOW()')->fetchColumn();
-    $businessDate = substr($orderCreatedAt, 0, 10);
+    if ($total !== $quoted) {
+        throw new DomainException('Menu prices have changed. Reload the menu and confirm the new total.');
+    }
     $queueNumber = reserve_order_queue_number($pdo, $businessDate);
     $orderNumber = format_order_number($businessDate, $queueNumber);
     $slipNumber = null;
@@ -234,10 +288,12 @@ try {
     $orderStatement = $pdo->prepare(
         'INSERT INTO orders
             (order_number, slip_number, queue_number, order_type, location, status,
-             subtotal, total, kitchen_note, created_by, cashier_name, created_at)
+             subtotal, total, kitchen_note, created_by, cashier_name, created_at,
+             checkout_token, checkout_request_hash, checkout_mode)
          VALUES
             (:order_number, :slip_number, :queue_number, :order_type, :location, \'placed\',
-             :subtotal, :total, :kitchen_note, :created_by, :cashier_name, :created_at)'
+             :subtotal, :total, :kitchen_note, :created_by, :cashier_name, :created_at,
+             :token, :request_hash, :mode)'
     );
     $orderStatement->execute([
         'order_number' => $orderNumber,
@@ -251,6 +307,9 @@ try {
         'created_by' => $_SESSION['user_id'],
         'cashier_name' => $_SESSION['full_name'] ?? $_SESSION['username'],
         'created_at' => $orderCreatedAt,
+        'token' => $token,
+        'request_hash' => $fingerprint,
+        'mode' => $method === 'cod' ? 'cod' : 'prepaid',
     ]);
     $orderId = (int) $pdo->lastInsertId();
 
@@ -325,8 +384,21 @@ try {
         'order_id' => $orderId,
         'user_id' => $_SESSION['user_id'],
     ]);
+    if ($method !== 'cod') {
+        [$cashTendered, $change] = payment_tender($method, $total, $tendered);
+        $payment = $pdo->prepare("INSERT INTO order_payments
+            (order_id, entry_type, method, amount, tendered_amount, change_amount, reference_code, recorded_by, recorded_at)
+            VALUES (?, 'payment', ?, ?, ?, ?, ?, ?, ?)");
+        $payment->execute([$orderId, $method, $total, $cashTendered, $change,
+            $method === 'ewallet' ? $reference : null, $cashierId, $orderCreatedAt]);
+    }
     $pdo->commit();
     release_order_queue_lock();
+} catch (DomainException $exception) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    send_order_place_response(422, ['success' => false, 'message' => $exception->getMessage()]);
 } catch (Throwable $exception) {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();

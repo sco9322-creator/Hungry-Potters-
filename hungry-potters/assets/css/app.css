@@ -1,3 +1,51 @@
+.pos-confirmation {
+    overflow: hidden;
+    border: 1px solid #c5dacf;
+    border-radius: 1rem;
+    background: #fff;
+    color: #12382e;
+}
+.pos-confirmation__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    background: #edf6f0;
+}
+.pos-confirmation__header h2 { font-size: 1.125rem; font-weight: 700; }
+.pos-confirmation__header p { margin-top: .2rem; font-size: .875rem; color: #486257; }
+.pos-confirmation__queue { flex-shrink: 0; text-align: right; }
+.pos-confirmation__queue span { display: block; font-size: .75rem; }
+.pos-confirmation__queue strong { font-size: 1.375rem; line-height: 1.2; }
+.pos-confirmation__details { margin: 1rem 1.25rem; }
+.pos-confirmation__details > div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: .25rem 0;
+}
+.pos-confirmation__details dd { text-align: right; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; font-weight: 600; }
+.pos-confirmation__details .pos-confirmation__change { margin-top: .5rem; padding-top: .75rem; border-top: 1px solid #d9e5dd; font-weight: 700; }
+.pos-confirmation__change dd { font-size: 1.25rem; }
+.pos-confirmation__actions { display: flex; flex-wrap: wrap; gap: .5rem; padding: 0 1.25rem 1.25rem; }
+.pos-confirmation__actions a {
+    flex: 1 1 8rem;
+    display: grid;
+    place-items: center;
+    min-height: 2.75rem;
+    padding: .5rem .75rem;
+    border: 1px solid #a9bfb2;
+    border-radius: .625rem;
+    text-align: center;
+    font-weight: 600;
+}
+.pos-confirmation__actions .pos-confirmation__primary { background: #12382e; border-color: #12382e; color: white; }
+.pos-confirmation__actions a:hover { background: #edf6f0; }
+.pos-confirmation__actions .pos-confirmation__primary:hover { background: #204c3e; }
+.pos-confirmation__actions a:focus-visible { outline: 2px solid #126b50; outline-offset: 2px; }
+
 @layer base {
     html,
     body {

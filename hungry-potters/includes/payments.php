@@ -24,6 +24,21 @@ function payment_method_label(string $method): string
     };
 }
 
+// The calling action owns the transaction. Cash drawer movement is amount, after change.
+function payment_tender(string $method, float $amount, ?float $cashTendered): array
+{
+    if ($amount <= 0 || !in_array($method, ['cash', 'ewallet'], true)) {
+        throw new DomainException('Choose a valid payment method and positive amount.');
+    }
+    if ($method === 'ewallet') {
+        return [null, 0.0];
+    }
+    if ($cashTendered === null || $cashTendered < $amount) {
+        throw new DomainException('Cash tendered must cover the payment.');
+    }
+    return [$cashTendered, round($cashTendered - $amount, 2)];
+}
+
 function payment_parse_amount(string $input): ?float
 {
     $input = trim($input);

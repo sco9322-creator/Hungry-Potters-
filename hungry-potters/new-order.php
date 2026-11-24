@@ -68,6 +68,7 @@ require __DIR__ . '/includes/header.php';
 <div
     class="grid w-full grid-cols-1 items-start gap-6 lg:grid-cols-12"
     data-pos
+    data-cashier="<?= h($_SESSION['user_id']) ?>"
     data-order-endpoint="actions/order-place.php"
     data-csrf-token="<?= h(csrf_token()) ?>"
     data-queue-number="<?= h($nextQueueNumber) ?>"
@@ -256,9 +257,52 @@ require __DIR__ . '/includes/header.php';
             <div class="flex flex-col gap-2 pt-1">
                 <button class="group flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-primary font-body-lg-bold text-body-lg-bold text-on-primary shadow-md transition-all hover:bg-primary-container hover:shadow-lg active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50" data-submit-order disabled type="button">
                     <span class="material-symbols-outlined text-[22px] text-primary-fixed">restaurant</span>
-                    <span>Confirm Order (Q-<?= h(str_pad((string) $nextQueueNumber, 3, '0', STR_PAD_LEFT)) ?>)</span>
+                    <span>Proceed to checkout</span>
                     <span class="material-symbols-outlined text-[20px]">arrow_forward</span>
                 </button>
+                <form data-checkout hidden class="rounded-xl bg-surface-container-low p-4">
+                    <h2 class="font-headline-sm text-primary">Checkout · ₱<span data-checkout-total></span></h2>
+                    <label class="block mt-3">Payment method
+                        <select data-method class="block w-full rounded-lg p-3">
+                            <option value="cash">Cash received now</option>
+                            <option value="ewallet">GCash / e-wallet</option>
+                            <option data-cod value="cod">Cash on delivery</option>
+                        </select>
+                    </label>
+                    <label data-cash-field class="block mt-3">Cash tendered (₱)
+                        <input data-tender type="number" step="0.01" min="0.01" max="99999999.99" inputmode="decimal" class="block w-full rounded-lg p-3">
+                        Change · ₱<output data-change>0.00</output>
+                    </label>
+                    <label data-reference-field hidden class="block mt-3">Transaction reference
+                        <input data-reference maxlength="100" class="block w-full rounded-lg p-3">
+                    </label>
+                    <label data-confirm-field class="block mt-3"><input type="checkbox" data-received> <span data-confirm-label></span></label>
+                    <p data-checkout-status role="status" class="mt-3"></p>
+                    <button data-pay class="min-h-12 rounded-lg bg-primary px-4 text-on-primary" type="submit">Confirm checkout</button>
+                    <button data-back class="min-h-12 px-4" type="button">Back to ticket</button>
+                </form>
+                <section data-checkout-success hidden aria-labelledby="checkout-result-title" class="pos-confirmation">
+                    <div class="pos-confirmation__header">
+                        <div>
+                            <h2 id="checkout-result-title" data-result-title tabindex="-1"></h2>
+                            <p data-result-order></p>
+                        </div>
+                        <div class="pos-confirmation__queue">
+                            <span>Queue</span>
+                            <strong data-result-queue></strong>
+                        </div>
+                    </div>
+                    <dl class="pos-confirmation__details">
+                        <div><dt data-result-total-label>Order total</dt><dd data-result-total></dd></div>
+                        <div data-result-tender-row hidden><dt>Cash tendered</dt><dd data-result-tender></dd></div>
+                        <div data-result-change-row hidden class="pos-confirmation__change"><dt>Change to give</dt><dd data-result-change></dd></div>
+                        <div data-result-reference-row hidden><dt>E-wallet reference</dt><dd data-result-reference></dd></div>
+                    </dl>
+                    <div class="pos-confirmation__actions">
+                        <a data-print>View / print receipt</a>
+                        <a href="new-order.php" class="pos-confirmation__primary">New order</a>
+                    </div>
+                </section>
                 <button class="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container text-body-md-bold text-body-md-bold text-on-surface-variant transition-colors hover:bg-surface-container-high" data-clear-ticket type="button">
                     <span class="material-symbols-outlined text-[18px]">delete_sweep</span>
                     <span>Clear Order</span>

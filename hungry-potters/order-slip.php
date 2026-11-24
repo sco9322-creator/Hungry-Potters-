@@ -4,24 +4,29 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 require_role(ROLE_POLICY_ORDER_ENTRY);
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/payments.php';
+header('Cache-Control: private, no-store');
 
 $slipNumber = isset($_GET['slip']) && is_string($_GET['slip'])
     ? trim($_GET['slip'])
     : '';
 
 $order = null;
-if ($slipNumber !== '' && strlen($slipNumber) <= 32) {
+$orderId = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+$bySlip = !isset($_GET['id']) && $slipNumber !== '' && strlen($slipNumber) <= 32;
+$pdo->beginTransaction();
+if ($bySlip || ($orderId && !isset($_GET['slip']))) {
     $orderStatement = $pdo->prepare(
         "SELECT orders.id, orders.slip_number, orders.order_number, orders.order_type,
             orders.status, orders.cancel_reason, orders.cancelled_at, orders.total,
             DATE_FORMAT(orders.created_at, '%b %e, %Y %l:%i %p') AS slip_created_at,
-            orders.cashier_name,
+            orders.cashier_name, orders.queue_number, orders.checkout_mode,
             users.full_name AS staff_name
          FROM orders
          LEFT JOIN users ON users.id = orders.created_by
-         WHERE orders.slip_number = :slip_number AND orders.order_type = 'takeout'"
+         WHERE " . ($bySlip ? "orders.slip_number = ? AND orders.order_type = 'takeout'" : 'orders.id = ?')
     );
-    $orderStatement->execute(['slip_number' => $slipNumber]);
+    $orderStatement->execute([$bySlip ? $slipNumber : $orderId]);
     $order = $orderStatement->fetch() ?: null;
 }
 
@@ -35,11 +40,24 @@ if ($order !== null) {
     );
     $itemsStatement->execute(['order_id' => $order['id']]);
     $items = $itemsStatement->fetchAll();
+    $history = $pdo->prepare('SELECT p.*, u.full_name AS collector FROM order_payments p
+        LEFT JOIN users u ON u.id = p.recorded_by WHERE p.order_id = ? ORDER BY p.recorded_at, p.id');
+    $history->execute([$order['id']]);
+    $entries = $history->fetchAll();
+    $totals = ['payment' => 0.0, 'refund' => 0.0, 'void' => 0.0];
+    foreach ($entries as $entry) {
+        $totals[$entry['entry_type']] += (float) $entry['amount'];
+    }
+    $net = round($totals['payment'] - $totals['refund'] - $totals['void'], 2);
+    $cancelled = $order['status'] === 'cancelled';
+    $due = $cancelled ? 0.0 : max(0, round((float) $order['total'] - $net, 2));
+    $paymentState = $cancelled ? ($entries ? 'Reversed' : 'Cancelled') : ($due == 0 ? 'Paid' : ($net > 0 ? 'Partially paid' : 'Unpaid'));
 } else {
     http_response_code(404);
 }
 
-$pageTitle = 'Takeout Order Slip';
+$pdo->commit();
+$pageTitle = $bySlip ? 'Takeout Order Slip' : 'Order receipt';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -73,7 +91,7 @@ $pageTitle = 'Takeout Order Slip';
                 <p class="font-label-sm uppercase tracking-wider text-on-surface-variant">Hungry Potters</p>
             </div>
             <h1 class="mt-2 font-headline-lg font-bold text-primary">Slip not found</h1>
-            <p class="mt-2 font-body-md text-on-surface-variant">We couldn't find that takeout order slip. Check the slip number and try again.</p>
+            <p class="mt-2 font-body-md text-on-surface-variant">Check the order or takeout slip number and try again.</p>
             <a class="mt-6 inline-flex min-h-12 items-center rounded-lg bg-primary px-5 font-body-md-bold text-on-primary" href="orders.php">Back to Orders</a>
         </main>
     <?php else: ?>
@@ -84,12 +102,13 @@ $pageTitle = 'Takeout Order Slip';
                     <img alt="Hungry Potters logo" class="h-10 w-10 shrink-0 object-contain" src="assets/images/logo.png">
                     <p class="font-label-sm uppercase tracking-wider text-on-surface-variant">Hungry Potters</p>
                 </div>
-                <h1 class="mt-1 font-headline-lg font-bold text-primary">Takeout Order Slip</h1>
+                <h1 class="mt-1 font-headline-lg font-bold text-primary"><?= h($pageTitle) ?></h1>
+                <p><?= h($order['order_number']) ?> · <?= h(ucfirst(str_replace('_', '-', $order['order_type']))) ?></p>
                 <p class="mt-2 font-label-md text-on-surface-variant"><?= h($order['slip_created_at']) ?></p>
             </div>
             <div class="rounded-xl bg-secondary-container px-4 py-3 text-center text-on-secondary-container">
-                <span class="block font-label-sm uppercase tracking-wider">Slip #</span>
-                <strong class="font-headline-md"><?= h($order['slip_number']) ?></strong>
+                <strong class="font-headline-md">Q-<?= h(str_pad((string)$order['queue_number'], 3, '0', STR_PAD_LEFT)) ?></strong>
+                <?php if ($order['slip_number']): ?><span class="block">Slip # <?= h($order['slip_number']) ?></span><?php endif; ?>
             </div>
         </div>
         <?php if ($order['status'] === 'cancelled'): ?>
@@ -134,6 +153,22 @@ $pageTitle = 'Takeout Order Slip';
             <span>Total</span>
             <span>₱<?= h(number_format((float) $order['total'], 2)) ?></span>
         </div>
+        <section class="mt-5">
+            <h2 class="font-body-md-bold">Payment history · <?= h($paymentState) ?></h2>
+            <?php if (!$entries): ?><p>No money recorded.</p><?php endif; ?>
+            <?php foreach ($entries as $entry): ?>
+                <div class="border-b py-3">
+                    <strong>#<?= h($entry['id']) ?> <?= h(ucfirst($entry['entry_type'])) ?> · <?= h(payment_method_label($entry['method'])) ?> · ₱<?= h($entry['amount']) ?></strong>
+                    <p><?= h($entry['recorded_at']) ?> · <?= h($entry['collector'] ?? 'Staff') ?></p>
+                    <?php if ($entry['tendered_amount'] !== null): ?><p>Tendered ₱<?= h($entry['tendered_amount']) ?> · Change ₱<?= h($entry['change_amount']) ?></p><?php endif; ?>
+                    <?php if ($entry['reference_code'] !== null): ?><p>Reference <?= h($entry['reference_code']) ?></p><?php endif; ?>
+                    <?php if ($entry['related_payment_id'] !== null): ?><p>Against payment #<?= h($entry['related_payment_id']) ?> · <?= h($entry['reason']) ?></p><?php endif; ?>
+                </div>
+            <?php endforeach; ?>
+            <p>Total payments ₱<?= h(number_format($totals['payment'], 2)) ?> · Refunds ₱<?= h(number_format($totals['refund'], 2)) ?> · Voids ₱<?= h(number_format($totals['void'], 2)) ?></p>
+            <p>Net paid ₱<?= h(number_format($net, 2)) ?> · Remaining balance ₱<?= h(number_format($due, 2)) ?></p>
+            <?php if ($order['checkout_mode'] === 'cod' && $due > 0): ?><p>Cash on delivery · collect the remaining balance.</p><?php endif; ?>
+        </section>
         <div class="no-print mt-7 flex flex-wrap gap-3">
             <button class="min-h-12 rounded-lg bg-primary px-5 font-body-md-bold text-on-primary" onclick="window.print()" type="button">Print slip</button>
             <a class="flex min-h-12 items-center rounded-lg bg-surface-container px-5 font-body-md-bold text-primary" href="new-order.php">Back to New Order</a>

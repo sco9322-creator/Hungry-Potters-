@@ -21,6 +21,13 @@ if (!in_array($sort, $validSorts, true)) {
 }
 $canUpdateOrders = role_is_allowed(ROLE_POLICY_KITCHEN_OPERATIONS);
 $canEditOrders = role_is_allowed(ROLE_POLICY_ORDER_ENTRY);
+$paymentFilter = $canEditOrders ? ($_GET['payment'] ?? 'all') : 'all';
+$paymentCondition = match ($paymentFilter) {
+    'unpaid' => 'net_paid <= 0 AND total > 0',
+    'partial' => 'net_paid > 0 AND net_paid < total',
+    'paid' => 'net_paid >= total',
+    default => '',
+};
 $flashMessage = $_SESSION['orders_message'] ?? '';
 unset($_SESSION['orders_message']);
 $flashType = $_SESSION['orders_message_type'] ?? 'success';
@@ -123,7 +130,9 @@ $ordersSql = 'SELECT
      FROM orders
      LEFT JOIN order_items ON order_items.order_id = orders.id'
      . ($where !== [] ? ' WHERE ' . implode(' AND ', $where) : '')
-     . ' GROUP BY orders.id ORDER BY ' . $orderBy . ' LIMIT 100';
+     . ' GROUP BY orders.id'
+     . ($paymentCondition === '' ? '' : " HAVING orders.status <> 'cancelled' AND " . $paymentCondition)
+     . ' ORDER BY ' . $orderBy . ' LIMIT 100';
 $ordersStatement = $pdo->prepare($ordersSql);
 $ordersStatement->execute($parameters);
 $orders = $ordersStatement->fetchAll();
@@ -320,6 +329,15 @@ require __DIR__ . '/includes/header.php';
     <section class="mb-6 flex flex-col gap-4 rounded-xl bg-surface-container-lowest p-4 shadow-sm">
         <form action="orders.php" method="get" class="flex flex-col items-center justify-between gap-4 lg:flex-row">
             <input type="hidden" name="status" value="<?= h($statusFilter) ?>">
+            <?php if ($canEditOrders): ?>
+                <label>Payment
+                    <select name="payment" class="h-12 rounded-lg bg-surface-container-low px-3">
+                        <?php foreach (['all' => 'All payments', 'unpaid' => 'Unpaid', 'partial' => 'Partially paid', 'paid' => 'Paid'] as $value => $label): ?>
+                            <option value="<?= h($value) ?>" <?= $value === $paymentFilter ? 'selected' : '' ?>><?= h($label) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+            <?php endif; ?>
             <div class="relative w-full lg:w-96">
                 <label class="sr-only" for="order-search">Search orders</label>
                 <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[20px] text-outline">search</span>
@@ -350,6 +368,7 @@ require __DIR__ . '/includes/header.php';
             foreach ($filterTabs as $key => $tab):
                 $tabQuery = http_build_query(array_filter([
                     'status' => $key === 'all' ? null : $key,
+                    'payment' => $paymentCondition === '' ? null : $paymentFilter,
                     'search' => $search,
                     'sort' => $sort === 'oldest' ? null : $sort,
                 ], static fn ($value): bool => $value !== null && $value !== ''));
@@ -389,6 +408,7 @@ require __DIR__ . '/includes/header.php';
                                 $detailQuery = http_build_query(array_filter([
                                     'id' => (int) $order['id'],
                                     'status' => $statusFilter === 'all' ? null : $statusFilter,
+                                    'payment' => $paymentCondition === '' ? null : $paymentFilter,
                                     'search' => $search,
                                     'sort' => $sort === 'oldest' ? null : $sort,
                                 ], static fn ($value): bool => $value !== null && $value !== ''));
@@ -471,6 +491,10 @@ require __DIR__ . '/includes/header.php';
                                                         · ₱<?= h(number_format($orderBalance, 2)) ?> due
                                                     <?php endif; ?>
                                                 </span>
+                                                <a class="underline" href="order-slip.php?id=<?= h($order['id']) ?>">Receipt</a>
+                                                <?php if ($orderBalance > 0 && $orderStatus !== 'cancelled'): ?>
+                                                    <a class="underline" href="orders.php?<?= h($detailQuery) ?>#collect-payment">Collect payment</a>
+                                                <?php endif; ?>
                                             <?php endif; ?>
                                             <?php if ($canCancelOrder): ?>
                                                 <button
@@ -522,6 +546,7 @@ require __DIR__ . '/includes/header.php';
                     <?php
                     $closeQuery = http_build_query(array_filter([
                         'status' => $statusFilter === 'all' ? null : $statusFilter,
+                        'payment' => $paymentCondition === '' ? null : $paymentFilter,
                         'search' => $search,
                         'sort' => $sort === 'oldest' ? null : $sort,
                     ], static fn ($value): bool => $value !== null && $value !== ''));
@@ -776,6 +801,7 @@ require __DIR__ . '/includes/header.php';
                             <?php endif; ?>
 
                             <?php if ($selectedBalanceDue > 0 && $selectedStatus !== 'cancelled'): ?>
+                                <div id="collect-payment"></div>
                                 <?php if ($canRecordPayments): ?>
                                     <form action="actions/payment-record.php" data-confirm data-confirm-title="Record payment?" data-confirm-message="Confirm the money received for this order." data-confirm-text="Record payment" data-confirm-rows="<?= h(json_encode(['Order' => $selectedOrder['order_number']])) ?>" class="mt-4 flex flex-col gap-3 rounded-lg border border-outline-variant bg-surface-container-lowest p-4" method="post">
                                         <input name="csrf_token" type="hidden" value="<?= h(csrf_token()) ?>">

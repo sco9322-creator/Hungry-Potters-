@@ -211,18 +211,103 @@
         showMessage('The ticket has been cleared.');
     });
 
-    submitButton?.addEventListener('click', async () => {
-        if (submitting || cart.size === 0 || !orderType || !locationInput) {
-            return;
+    const field = (name) => root.querySelector('[data-' + name + ']');
+    const form = field('checkout');
+    const method = field('method');
+    const tender = field('tender');
+    const reference = field('reference');
+    const received = field('received');
+    const storageKey = 'hp.checkout.' + location.pathname + '.' + root.dataset.cashier;
+    let pending;
+    function lockTicket(locked) {
+        root.querySelectorAll('[data-menu-grid], [data-ticket-items], [data-clear-ticket], [data-order-type], [data-order-location], [data-kitchen-note]').forEach(el => { el.inert = locked; });
+        submitButton.hidden = locked;
+    }
+    function updatePayment() {
+        const cash = method.value === 'cash';
+        const wallet = method.value === 'ewallet';
+        field('cash-field').hidden = !cash;
+        tender.disabled = !cash;
+        tender.required = cash;
+        tender.min = field('checkout-total').textContent;
+        field('change').textContent = money(Math.max(0, Number(tender.value) - Number(tender.min)));
+        field('reference-field').hidden = !wallet;
+        reference.required = wallet;
+        reference.disabled = !wallet;
+        field('confirm-field').hidden = method.value === 'cod';
+        received.required = method.value !== 'cod';
+        field('confirm-label').textContent = wallet ? 'I verified the funds in the receiving wallet.' : 'I physically received the cash.';
+        field('pay').textContent = method.value === 'cod' ? 'Send unpaid COD order to kitchen' : 'Record payment and send to kitchen';
+    }
+    method.addEventListener('change', () => { received.checked = false; updatePayment(); });
+    tender.addEventListener('input', () => { received.checked = false; updatePayment(); });
+    reference.addEventListener('input', () => { received.checked = false; });
+    submitButton.addEventListener('click', () => {
+        if (!cart.size || !locationInput.reportValidity()) return;
+        form.reset();
+        field('checkout-total').textContent = field('ticket-total').textContent;
+        field('cod').disabled = orderType.value !== 'delivery';
+        field('checkout-status').textContent = '';
+        form.hidden = false;
+        lockTicket(true);
+        updatePayment();
+        method.focus();
+    });
+    field('back').addEventListener('click', () => {
+        form.hidden = true;
+        lockTicket(false);
+        submitButton.focus();
+    });
+    function freezeAttempt() {
+        form.hidden = false;
+        lockTicket(true);
+        for (const el of [method, tender, reference, received, field('back')]) el.disabled = true;
+        field('pay').textContent = 'Retry same checkout';
+    }
+    try {
+        pending = JSON.parse(sessionStorage.getItem(storageKey));
+        if (pending) {
+            field('checkout-total').textContent = pending.checkout.total;
+            method.value = pending.checkout.method;
+            tender.value = pending.checkout.tendered || '';
+            reference.value = pending.checkout.reference;
+            received.checked = pending.checkout.received;
+            updatePayment();
+            freezeAttempt();
+            field('checkout-status').textContent = 'Recover the previous checkout before starting another. Use the same payment.';
         }
-        if (!locationInput.checkValidity()) {
-            locationInput.reportValidity();
-            return;
-        }
-
+    } catch {
+        field('pay').disabled = true;
+        showMessage('Browser session storage is required for checkout recovery.', true);
+    }
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (submitting) return;
         submitting = true;
-        renderCart();
+        field('pay').disabled = true;
         try {
+            if (!pending) {
+                // getRandomValues also works on restaurant LANs served over HTTP.
+                const bytes = crypto.getRandomValues(new Uint8Array(16));
+                bytes[6] = (bytes[6] & 15) | 64;
+                bytes[8] = (bytes[8] & 63) | 128;
+                const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+                const token = [hex.slice(0,8), hex.slice(8,12), hex.slice(12,16), hex.slice(16,20), hex.slice(20)].join('-');
+                const attempt = {
+                    order_type: orderType.value,
+                    location: orderType.value === 'takeout' ? '' : locationInput.value.trim(),
+                    kitchen_note: field('kitchen-note').value.trim(),
+                    items: Array.from(cart.values(), item => ({menu_item_id: Number(item.id), quantity: item.quantity})),
+                    checkout: {token, method: method.value, total: field('checkout-total').textContent,
+                        received: method.value !== 'cod' && received.checked,
+                        reference: method.value === 'ewallet' ? reference.value.trim() : '',
+                        tendered: method.value === 'cash' ? tender.value : null}
+                };
+                sessionStorage.setItem(storageKey, JSON.stringify(attempt));
+                pending = attempt;
+            }
+            freezeAttempt();
+            field('checkout-status').textContent = 'Checking checkout…';
             const response = await fetch(root.dataset.orderEndpoint, {
                 method: 'POST',
                 credentials: 'same-origin',
@@ -230,34 +315,51 @@
                     'Content-Type': 'application/json',
                     Accept: 'application/json'
                 },
-                body: JSON.stringify({
-                    csrf_token: root.dataset.csrfToken,
-                    order_type: orderType.value,
-                    location: locationInput.value.trim(),
-                    kitchen_note: root.querySelector('[data-kitchen-note]')?.value.trim() || '',
-                    items: Array.from(cart.values()).map((item) => ({
-                        menu_item_id: Number(item.id),
-                        quantity: item.quantity
-                    }))
-                })
+                body: JSON.stringify({...pending, csrf_token: root.dataset.csrfToken})
             });
             const result = await response.json();
             if (!response.ok || result.success !== true) {
+                if (result.success === false && [400, 409, 422].includes(response.status)) {
+                    sessionStorage.removeItem(storageKey);
+                    pending = null;
+                    method.disabled = received.disabled = field('back').disabled = false;
+                    updatePayment();
+                    if (!cart.size) field('back').click();
+                }
                 throw new Error(result.message || `Order could not be placed (HTTP ${response.status}).`);
             }
-            if (orderType.value === 'takeout') {
-                if (!result.slip_number) {
-                    throw new Error('The order was placed, but its slip number could not be loaded.');
-                }
-                window.location.assign(`order-slip.php?slip=${encodeURIComponent(result.slip_number)}`);
-                return;
+            const checkout = pending.checkout;
+            const pesos = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
+            const isCash = checkout.method === 'cash';
+            const isCod = checkout.method === 'cod';
+            field('result-title').textContent = isCod ? 'Order placed · Collect on delivery' : 'Payment received';
+            field('result-order').textContent = result.order_number;
+            field('result-queue').textContent = 'Q-' + String(result.queue_number).padStart(3, '0');
+            field('result-total-label').textContent = isCod ? 'Amount to collect' : 'Order total';
+            field('result-total').textContent = pesos.format(result.total);
+            field('result-tender-row').hidden = !isCash;
+            field('result-change-row').hidden = !isCash;
+            field('result-reference-row').hidden = checkout.method !== 'ewallet';
+            if (isCash) {
+                field('result-tender').textContent = pesos.format(checkout.tendered);
+                field('result-change').textContent = pesos.format(Number(checkout.tendered) - Number(result.total));
+            } else if (checkout.method === 'ewallet') {
+                field('result-reference').textContent = checkout.reference;
             }
-            showMessage(`Order ${result.order_number} placed as Q-${String(result.queue_number).padStart(3, '0')}.`);
-            window.setTimeout(() => window.location.reload(), 900);
+            field('print').href = 'order-slip.php?id=' + encodeURIComponent(result.order_id);
+            form.hidden = true;
+            field('clear-ticket').hidden = true;
+            field('checkout-success').hidden = false;
+            field('result-title').focus();
+            sessionStorage.removeItem(storageKey);
+            pending = null;
         } catch (error) {
+            const message = pending ? 'Checkout outcome unconfirmed. Retry this same checkout before collecting money again.' : error.message;
+            field('checkout-status').textContent = message;
+            showMessage(message, true);
+        } finally {
             submitting = false;
-            renderCart();
-            showMessage(error instanceof Error ? error.message : 'Could not place the order.', true);
+            field('pay').disabled = false;
         }
     });
 

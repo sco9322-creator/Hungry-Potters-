@@ -117,8 +117,7 @@ try {
         if ($amount > $balanceDue) {
             throw new DomainException('The payment exceeds the remaining order balance.');
         }
-        $tenderedAmount = $method === 'cash' ? $tenderedAmount : null;
-        $changeAmount = $method === 'cash' ? round((float) $tenderedAmount - $amount, 2) : 0.0;
+        [$tenderedAmount, $changeAmount] = payment_tender($method, $amount, $tenderedAmount);
         $relatedPaymentId = null;
         $reason = null;
     } else {

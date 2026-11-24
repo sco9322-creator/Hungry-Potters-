@@ -585,7 +585,7 @@ require __DIR__ . '/includes/header.php';
                             <span class="rounded bg-surface-container px-2 py-0.5 font-label-sm text-label-sm text-on-surface-variant"><?= h(count($selectedItems)) ?> lines • <?= h(array_sum(array_map(static fn (array $item): int => (int) $item['quantity'], $selectedItems))) ?> units</span>
                         </div>
                         <?php if ($canEditSelectedOrder): ?>
-                            <form action="actions/order-edit.php" class="flex flex-col gap-3" data-order-edit-form method="post">
+                            <form action="actions/order-edit.php" class="flex flex-col gap-3" data-confirm data-confirm-title="Save order changes?" data-confirm-message="Review the changes to this ticket." data-confirm-text="Save changes" data-confirm-rows="<?= h(json_encode(['Order' => $selectedOrder['order_number']])) ?>" data-order-edit-form method="post">
                                 <input name="csrf_token" type="hidden" value="<?= h(csrf_token()) ?>">
                                 <input name="order_id" type="hidden" value="<?= h($selectedOrder['id']) ?>">
                                 <input name="return_query" type="hidden" value="<?= h(http_build_query(['id' => (int) $selectedOrder['id']])) ?>">
@@ -599,7 +599,7 @@ require __DIR__ . '/includes/header.php';
                                             <span class="font-label-sm text-label-sm text-on-surface-variant">₱<?= h(number_format((float) $item['unit_price'], 2)) ?> each</span>
                                         </div>
                                         <label class="flex flex-col gap-1 font-label-sm text-on-surface-variant">Qty
-                                            <input class="h-10 w-full rounded-lg bg-surface-container-lowest px-2 text-on-surface focus:outline-none focus:ring-2 focus:ring-primary-container" max="100" min="0" name="existing_items[<?= h($item['id']) ?>]" required step="1" type="number" value="<?= h($item['quantity']) ?>">
+                                            <input class="h-10 w-full rounded-lg bg-surface-container-lowest px-2 text-on-surface focus:outline-none focus:ring-2 focus:ring-primary-container" max="100" min="0" data-item-name="<?= h($item['item_name']) ?>" name="existing_items[<?= h($item['id']) ?>]" required step="1" type="number" value="<?= h($item['quantity']) ?>">
                                         </label>
                                     </div>
                                 <?php endforeach; ?>
@@ -731,7 +731,7 @@ require __DIR__ . '/includes/header.php';
                                             ):
                                             ?>
                                                 <div class="mt-2 flex flex-col gap-2 sm:flex-row">
-                                                    <form action="actions/payment-record.php" class="flex flex-1 flex-col gap-2 rounded-lg bg-surface-container-lowest p-3" method="post">
+                                                    <form action="actions/payment-record.php" data-confirm data-confirm-title="Record refund?" data-confirm-message="Confirm the amount returned to the customer." data-confirm-text="Record refund" data-confirm-tone="danger" data-confirm-rows="<?= h(json_encode(['Order' => $selectedOrder['order_number']])) ?>" class="flex flex-1 flex-col gap-2 rounded-lg bg-surface-container-lowest p-3" method="post">
                                                         <input name="csrf_token" type="hidden" value="<?= h(csrf_token()) ?>">
                                                         <input name="order_id" type="hidden" value="<?= h($selectedOrder['id']) ?>">
                                                         <input name="entry_type" type="hidden" value="refund">
@@ -754,7 +754,7 @@ require __DIR__ . '/includes/header.php';
                                                         <button class="min-h-9 rounded-lg bg-error-container px-3 font-label-md font-bold text-on-error-container" type="submit">Record refund</button>
                                                     </form>
                                                     <?php if ((float) $paymentEntry['reversed_amount'] === 0.0): ?>
-                                                        <form action="actions/payment-record.php" class="flex flex-1 flex-col justify-end gap-2 rounded-lg bg-surface-container-lowest p-3" method="post">
+                                                        <form action="actions/payment-record.php" data-confirm data-confirm-title="Void full payment?" data-confirm-message="This reverses the entire recorded payment." data-confirm-text="Void payment" data-confirm-tone="danger" data-confirm-rows="<?= h(json_encode(['Order' => $selectedOrder['order_number']])) ?>" class="flex flex-1 flex-col justify-end gap-2 rounded-lg bg-surface-container-lowest p-3" method="post">
                                                             <input name="csrf_token" type="hidden" value="<?= h(csrf_token()) ?>">
                                                             <input name="order_id" type="hidden" value="<?= h($selectedOrder['id']) ?>">
                                                             <input name="entry_type" type="hidden" value="void">
@@ -777,7 +777,7 @@ require __DIR__ . '/includes/header.php';
 
                             <?php if ($selectedBalanceDue > 0 && $selectedStatus !== 'cancelled'): ?>
                                 <?php if ($canRecordPayments): ?>
-                                    <form action="actions/payment-record.php" class="mt-4 flex flex-col gap-3 rounded-lg border border-outline-variant bg-surface-container-lowest p-4" method="post">
+                                    <form action="actions/payment-record.php" data-confirm data-confirm-title="Record payment?" data-confirm-message="Confirm the money received for this order." data-confirm-text="Record payment" data-confirm-rows="<?= h(json_encode(['Order' => $selectedOrder['order_number']])) ?>" class="mt-4 flex flex-col gap-3 rounded-lg border border-outline-variant bg-surface-container-lowest p-4" method="post">
                                         <input name="csrf_token" type="hidden" value="<?= h(csrf_token()) ?>">
                                         <input name="order_id" type="hidden" value="<?= h($selectedOrder['id']) ?>">
                                         <input name="entry_type" type="hidden" value="payment">
@@ -870,7 +870,7 @@ require __DIR__ . '/includes/header.php';
 
                 <?php if ($canUpdateOrders && in_array($selectedStatus, ['placed', 'preparing'], true)): ?>
                     <div class="flex flex-col gap-2 border-t border-surface-container bg-surface-container-low p-5">
-                        <form action="actions/order-status-update.php" method="post" data-order-status-form data-status-endpoint="actions/order-status-update.php">
+                        <form action="actions/order-status-update.php" method="post" data-order-status-form data-order-number="<?= h($selectedOrder['order_number']) ?>" data-status-endpoint="actions/order-status-update.php">
                             <input type="hidden" name="csrf_token" value="<?= h(csrf_token()) ?>">
                             <input type="hidden" name="order_id" value="<?= h($selectedOrder['id']) ?>">
                             <input type="hidden" name="status" value="<?= $selectedStatus === 'placed' ? 'preparing' : 'completed' ?>">

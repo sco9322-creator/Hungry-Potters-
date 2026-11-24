@@ -81,11 +81,55 @@
         }
     });
 
+    const currency = new Intl.NumberFormat('en-PH', {style: 'currency', currency: 'PHP'});
+    document.addEventListener('hp-confirm-details', event => {
+        const form = event.target;
+        const fields = form.elements;
+        const details = event.detail;
+        if (fields.entry_type) {
+            details.push({label: 'Amount', value: currency.format(fields.amount.value)},
+                {label: 'Method', value: fields.method.selectedOptions?.[0]?.textContent.trim() || fields.method.value});
+            if (fields.method.value === 'cash' && fields.tendered_amount?.value) {
+                details.push({label: 'Tendered', value: currency.format(fields.tendered_amount.value)},
+                    {label: 'Change', value: currency.format(Math.max(0, fields.tendered_amount.value - fields.amount.value))});
+            }
+            if (fields.reference_code?.value) details.push({label: 'Reference', value: fields.reference_code.value});
+            if (fields.reason?.value) details.push({label: 'Reason', value: fields.reason.value});
+            if (fields.related_payment_id) details.push({label: 'Payment ID', value: fields.related_payment_id.value});
+        } else if (form.matches('[data-order-edit-form]')) {
+            for (const qty of form.querySelectorAll('[data-item-name]')) {
+                if (qty.value !== qty.defaultValue) details.push({label: qty.dataset.itemName, value: qty.defaultValue + ' → ' + qty.value});
+            }
+            for (const row of form.querySelectorAll('[data-order-add-item]')) {
+                details.push({label: 'Add', value: row.querySelector('input').value + ' × ' + row.querySelector('select').selectedOptions[0].textContent.trim()});
+            }
+        }
+    });
+
     document.querySelectorAll('[data-order-status-form]').forEach((form) => {
         form.addEventListener('submit', async (event) => {
             event.preventDefault();
             const button = form.querySelector('button[type="submit"]');
             const message = document.querySelector('[data-orders-message]');
+            if (button?.disabled) return;
+            if (button) button.disabled = true;
+            const completing = form.elements.status.value === 'completed';
+            let confirmed;
+            try {
+                confirmed = await window.HPConfirm.ask({
+                    title: completing ? 'Mark order completed?' : 'Start preparing order?',
+                    message: 'Update this order on the kitchen board.',
+                    details: [{label: 'Order', value: form.dataset.orderNumber},
+                        {label: 'New status', value: completing ? 'Completed' : 'Preparing'}],
+                    confirmText: completing ? 'Mark completed' : 'Start preparing', trigger: button
+                });
+            } finally {
+                if (button) {
+                    button.disabled = false;
+                    button.focus();
+                }
+            }
+            if (!confirmed) return;
             if (!button || !message) {
                 form.submit();
                 return;

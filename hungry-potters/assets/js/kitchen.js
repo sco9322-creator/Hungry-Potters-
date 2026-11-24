@@ -339,7 +339,7 @@
         const createdDate = new Date(String(order.created_at).replace(' ', 'T'));
         const datetime = Number.isNaN(createdDate.getTime()) ? '' : createdDate.toISOString();
 
-        return `<article class="flex flex-col rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-md${highlightClass}" data-order-card data-order-id="${escapeHtml(order.id)}" data-order-status="${escapeHtml(status)}">
+        return `<article class="flex flex-col rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-md${highlightClass}" data-order-card data-queue-number="${escapeHtml(order.queue_number)}" data-order-id="${escapeHtml(order.id)}" data-order-status="${escapeHtml(status)}">
             <div class="flex items-start justify-between gap-2 border-b border-surface-container-low pb-3">
                 <div class="flex flex-col">
                     <span class="text-[40px] font-bold leading-none tracking-tighter text-primary">${escapeHtml(queue)}</span>
@@ -453,13 +453,33 @@
         }
     }
 
+    const updatingOrders = new Set();
     async function updateOrder(button) {
         const card = button.closest('[data-order-card]');
-        if (!card) {
+        if (!card || updatingOrders.has(card.dataset.orderId)) {
             return;
         }
-        button.disabled = true;
+        const id = card.dataset.orderId;
+        const next = button.dataset.nextStatus;
+        const currentButton = () => board.querySelector(`[data-order-id="${CSS.escape(id)}"] [data-next-status="${CSS.escape(next)}"]`);
+        updatingOrders.add(id);
         try {
+            if (next === 'completed') {
+                const ok = await window.HPConfirm.ask({
+                    title: 'Mark as completed?', message: 'Move this ticket to Recently Completed and update the customer queue.',
+                    details: [{label: 'Queue', value: 'Q-' + card.dataset.queueNumber.padStart(3, '0')}],
+                    confirmText: 'Mark completed', trigger: button
+                });
+                const live = currentButton();
+                if (!button.isConnected) (live || board).focus();
+                if (!ok) return;
+                if (!live) {
+                    showMessage('This ticket has already changed. Check its current status.');
+                    return;
+                }
+                button = live;
+            }
+            button.disabled = true;
             const response = await fetch(statusEndpoint, {
                 method: 'POST',
                 credentials: 'same-origin',
@@ -482,6 +502,8 @@
         } catch (error) {
             showMessage(error instanceof Error ? error.message : 'Unable to update the order.', true);
             button.disabled = false;
+        } finally {
+            updatingOrders.delete(id);
         }
     }
 

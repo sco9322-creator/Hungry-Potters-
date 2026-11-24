@@ -29,7 +29,7 @@ require __DIR__ . '/includes/header.php';
 ?>
 <div
     class="flex w-full flex-col"
-    data-kitchen-board
+    tabindex="-1" data-kitchen-board
     data-csrf-token="<?= h(csrf_token()) ?>"
     data-status-endpoint="actions/order-status-update.php"
     data-refresh-endpoint="api/kitchen-orders.php"
@@ -152,7 +152,7 @@ require __DIR__ . '/includes/header.php';
                                 'delivery' => 'Delivery',
                             ][$order['order_type']] ?? $order['order_type'];
                             ?>
-                            <article class="flex flex-col rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-md" data-order-card data-order-id="<?= h($order['id']) ?>" data-order-status="<?= h($order['status']) ?>">
+                            <article class="flex flex-col rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-md" data-order-card data-queue-number="<?= h($order['queue_number']) ?>" data-order-id="<?= h($order['id']) ?>" data-order-status="<?= h($order['status']) ?>">
                                 <div class="flex items-start justify-between gap-2 border-b border-surface-container-low pb-3">
                                     <div class="flex flex-col">
                                         <span class="text-[40px] font-bold leading-none tracking-tighter text-primary">Q-<?= h(str_pad((string) $order['queue_number'], 3, '0', STR_PAD_LEFT)) ?></span>

@@ -98,6 +98,9 @@
                 const value = el.dataset.confirmFormat === 'peso' ? pesos.format(el.value)
                     : el.selectedOptions?.[0]?.textContent.trim() ?? el.value;
                 details.push({label: el.dataset.confirmLabel, value});
+                if (el.hasAttribute('data-confirm-expected')) {
+                    details.push({label: 'Difference', value: pesos.format(Number(el.value) - Number(el.dataset.confirmExpected))});
+                }
             }
             form.dispatchEvent(new CustomEvent('hp-confirm-details', {bubbles: true, detail: details}));
             const ok = await ask({

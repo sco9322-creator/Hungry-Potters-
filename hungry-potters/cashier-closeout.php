@@ -197,14 +197,14 @@ require __DIR__ . '/includes/header.php';
                 <p class="mt-4 rounded-lg bg-surface-container-low p-3 font-label-md text-label-md text-on-surface-variant">
                     Open the till with its starting cash float before recording payments. Orders can still be placed and sent to the kitchen while unpaid.
                 </p>
-                <form action="actions/cashier-shift.php" class="mt-4 flex flex-col gap-3 sm:max-w-md" method="post">
+                <form action="actions/cashier-shift.php" data-confirm data-confirm-title="Open cashier shift?" data-confirm-message="Record the opening float for this drawer." data-confirm-text="Open shift" data-confirm-rows="<?= h(json_encode(['Cashier' => $selectedCashier['full_name'], 'Date' => $selectedDate])) ?>" class="mt-4 flex flex-col gap-3 sm:max-w-md" method="post">
                     <input name="csrf_token" type="hidden" value="<?= h(csrf_token()) ?>">
                     <input name="action" type="hidden" value="open">
                     <input name="cashier_id" type="hidden" value="<?= h($selectedCashierId) ?>">
                     <input name="date" type="hidden" value="<?= h($selectedDate) ?>">
                     <label class="flex flex-col gap-1 font-label-sm text-on-surface-variant" for="opening-float">
                         Opening cash float
-                        <input class="h-12 rounded-lg bg-surface-container-low px-3 font-mono-metric text-on-surface" id="opening-float" inputmode="decimal" max="99999999.99" min="0" name="opening_float" required step="0.01" type="number" value="0.00">
+                        <input class="h-12 rounded-lg bg-surface-container-low px-3 font-mono-metric text-on-surface" data-confirm-label="Opening float" data-confirm-format="peso" id="opening-float" inputmode="decimal" max="99999999.99" min="0" name="opening_float" required step="0.01" type="number" value="0.00">
                     </label>
                     <button class="flex min-h-12 items-center justify-center rounded-lg bg-primary px-4 font-body-md-bold text-on-primary" type="submit">Open cashier shift</button>
                 </form>
@@ -242,14 +242,14 @@ require __DIR__ . '/includes/header.php';
                         </p>
                     </div>
                 <?php elseif ($canManageSelectedShift): ?>
-                    <form action="actions/cashier-shift.php" class="mt-5 flex flex-col gap-3 sm:max-w-md" method="post">
+                    <form action="actions/cashier-shift.php" data-confirm data-confirm-title="Close and reconcile shift?" data-confirm-message="Closing finalizes this drawer count." data-confirm-text="Close shift" data-confirm-tone="danger" data-confirm-rows="<?= h(json_encode(['Cashier' => $selectedCashier['full_name'], 'Date' => $selectedDate, 'Expected cash' => '₱' . number_format($expectedCash, 2)])) ?>" class="mt-5 flex flex-col gap-3 sm:max-w-md" method="post">
                         <input name="csrf_token" type="hidden" value="<?= h(csrf_token()) ?>">
                         <input name="action" type="hidden" value="close">
                         <input name="cashier_id" type="hidden" value="<?= h($selectedCashierId) ?>">
                         <input name="date" type="hidden" value="<?= h($selectedDate) ?>">
                         <label class="flex flex-col gap-1 font-label-sm text-on-surface-variant" for="cash-counted">
                             Cash counted in till
-                            <input class="h-12 rounded-lg bg-surface-container-low px-3 font-mono-metric text-on-surface" id="cash-counted" inputmode="decimal" max="99999999.99" min="0" name="cash_counted" required step="0.01" type="number">
+                            <input class="h-12 rounded-lg bg-surface-container-low px-3 font-mono-metric text-on-surface" data-confirm-label="Counted cash" data-confirm-format="peso" data-confirm-expected="<?= h(number_format($expectedCash, 2, '.', '')) ?>" id="cash-counted" inputmode="decimal" max="99999999.99" min="0" name="cash_counted" required step="0.01" type="number">
                         </label>
                         <button class="flex min-h-12 items-center justify-center rounded-lg bg-primary px-4 font-body-md-bold text-on-primary" type="submit">Close and reconcile shift</button>
                     </form>

@@ -295,7 +295,7 @@ require __DIR__ . '/includes/header.php';
                                     </td>
                                     <?php if ($roleCanEdit): ?>
                                         <td class="px-4 py-3 text-center">
-                                            <form action="actions/inventory-save.php" method="post" onsubmit="return confirm('<?= $filter === 'archived' ? 'Restore' : 'Remove' ?> this ingredient?<?= $filter === 'archived' ? '' : ' If it is used by a dish or has stock history, it will be archived; otherwise it will be deleted.' ?>');">
+                                            <form action="actions/inventory-save.php" method="post" data-confirm data-confirm-title="<?= $filter === 'archived' ? 'Restore ingredient?' : 'Remove ingredient?' ?>" data-confirm-message="<?= $filter === 'archived' ? 'Make this ingredient active again.' : 'Ingredients used by a dish or with stock history are archived. Other ingredients are permanently deleted.' ?>" data-confirm-text="<?= $filter === 'archived' ? 'Restore ingredient' : 'Remove ingredient' ?>" data-confirm-tone="<?= $filter === 'archived' ? 'default' : 'danger' ?>" data-confirm-rows="<?= h(json_encode(['Ingredient' => $item['name']])) ?>">
                                                 <input name="csrf_token" type="hidden" value="<?= h(csrf_token()) ?>">
                                                 <input name="action" type="hidden" value="<?= $filter === 'archived' ? 'restore' : 'remove' ?>">
                                                 <input name="item_id" type="hidden" value="<?= h($item['id']) ?>">
@@ -328,18 +328,18 @@ require __DIR__ . '/includes/header.php';
                             <span class="material-symbols-outlined text-[20px]">close</span>
                         </a>
                     </div>
-                    <form action="actions/inventory-save.php" method="post" class="flex flex-col gap-3 p-4">
+                    <form action="actions/inventory-save.php" method="post" data-confirm data-confirm-title="Save ingredient?" data-confirm-message="Review the stock and ingredient details." data-confirm-text="Save ingredient" class="flex flex-col gap-3 p-4">
                         <input type="hidden" name="csrf_token" value="<?= h(csrf_token()) ?>">
                         <input type="hidden" name="action" value="save">
                         <input type="hidden" name="item_id" value="<?= $editing ? h($selectedItem['id']) : '' ?>">
                         <label class="font-label-sm text-label-sm uppercase text-on-surface-variant" for="item-name">Item name</label>
-                        <input class="h-12 rounded-lg border border-outline-variant bg-surface px-3 text-on-surface outline-none focus:ring-2 focus:ring-primary-container" id="item-name" maxlength="100" name="name" required value="<?= $editing ? h($selectedItem['name']) : '' ?>">
+                        <input class="h-12 rounded-lg border border-outline-variant bg-surface px-3 text-on-surface outline-none focus:ring-2 focus:ring-primary-container" id="item-name" data-confirm-label="Ingredient" maxlength="100" name="name" required value="<?= $editing ? h($selectedItem['name']) : '' ?>">
                         <label class="font-label-sm text-label-sm uppercase text-on-surface-variant" for="item-description">Description</label>
                         <input class="h-12 rounded-lg border border-outline-variant bg-surface px-3 text-on-surface outline-none focus:ring-2 focus:ring-primary-container" id="item-description" maxlength="255" name="description" value="<?= $editing ? h($selectedItem['description']) : '' ?>">
                         <div class="grid grid-cols-2 gap-3">
                             <div class="flex flex-col gap-1">
                                 <label class="font-label-sm text-label-sm uppercase text-on-surface-variant" for="item-unit">Unit</label>
-                                <select class="h-12 min-w-0 rounded-lg border border-outline-variant bg-surface px-2 text-on-surface outline-none focus:ring-2 focus:ring-primary-container" id="item-unit" name="unit_choice" data-inventory-unit required>
+                                <select class="h-12 min-w-0 rounded-lg border border-outline-variant bg-surface px-2 text-on-surface outline-none focus:ring-2 focus:ring-primary-container" id="item-unit" data-confirm-label="Unit" name="unit_choice" data-inventory-unit required>
                                     <option value="">Choose</option>
                                     <?php foreach ($unitOptions as $unitOption): ?>
                                         <option value="<?= h($unitOption) ?>" <?= $editing && $selectedItem['unit'] === $unitOption ? 'selected' : '' ?>><?= h($unitOption) ?></option>
@@ -348,7 +348,7 @@ require __DIR__ . '/includes/header.php';
                                 </select>
                                 <div class="hidden flex-col gap-1" data-custom-unit-field>
                                     <label class="font-label-sm text-label-sm uppercase text-on-surface-variant" for="item-unit-custom">Custom unit</label>
-                                    <input class="h-12 min-w-0 rounded-lg border border-outline-variant bg-surface px-3 text-on-surface outline-none focus:ring-2 focus:ring-primary-container" id="item-unit-custom" maxlength="30" name="unit_custom" data-custom-unit placeholder="Enter unit">
+                                    <input class="h-12 min-w-0 rounded-lg border border-outline-variant bg-surface px-3 text-on-surface outline-none focus:ring-2 focus:ring-primary-container" id="item-unit-custom" data-confirm-label="Custom unit" maxlength="30" name="unit_custom" data-custom-unit placeholder="Enter unit">
                                 </div>
                             </div>
                             <div class="flex flex-col gap-1">
@@ -364,7 +364,7 @@ require __DIR__ . '/includes/header.php';
                         <div class="grid grid-cols-2 gap-3">
                             <div class="flex flex-col gap-1">
                                 <label class="font-label-sm text-label-sm uppercase text-on-surface-variant" for="item-stock">Stock on record</label>
-                                <input class="h-12 min-w-0 rounded-lg border border-outline-variant bg-surface px-3 text-on-surface outline-none focus:ring-2 focus:ring-primary-container" id="item-stock" min="0" name="current_stock" required step="0.01" type="number" value="<?= $editing ? h($selectedItem['current_stock']) : '0' ?>">
+                                <input class="h-12 min-w-0 rounded-lg border border-outline-variant bg-surface px-3 text-on-surface outline-none focus:ring-2 focus:ring-primary-container" id="item-stock" data-confirm-label="Stock quantity" min="0" name="current_stock" required step="0.01" type="number" value="<?= $editing ? h($selectedItem['current_stock']) : '0' ?>">
                             </div>
                             <div class="flex flex-col gap-1">
                                 <label class="font-label-sm text-label-sm uppercase text-on-surface-variant" for="item-threshold">Low-stock level</label>
@@ -417,13 +417,13 @@ require __DIR__ . '/includes/header.php';
                             <?php endif; ?>
                         </div>
                         <?php if ($roleCanEdit): ?>
-                            <form action="actions/inventory-save.php" method="post" class="flex flex-col gap-3 rounded-xl bg-surface-container-low p-4">
+                            <form action="actions/inventory-save.php" method="post" data-confirm data-confirm-title="Record restock?" data-confirm-message="Add this quantity to available stock." data-confirm-text="Record restock" data-confirm-rows="<?= h(json_encode(['Ingredient' => $selectedItem['name'], 'Unit' => $selectedItem['unit']])) ?>" class="flex flex-col gap-3 rounded-xl bg-surface-container-low p-4">
                                 <input type="hidden" name="csrf_token" value="<?= h(csrf_token()) ?>">
                                 <input type="hidden" name="action" value="restock">
                                 <input type="hidden" name="item_id" value="<?= h($selectedItem['id']) ?>">
                                 <h4 class="font-body-md-bold text-body-md-bold text-primary">Restock Intake</h4>
                                 <label class="font-label-sm text-label-sm uppercase text-on-surface-variant" for="restock-quantity">Quantity to add (<?= h($selectedItem['unit']) ?>)</label>
-                                <input class="h-12 rounded-lg border border-outline-variant bg-surface px-3 text-on-surface outline-none focus:ring-2 focus:ring-primary-container" id="restock-quantity" min="0.01" name="quantity" required step="0.01" type="number">
+                                <input class="h-12 rounded-lg border border-outline-variant bg-surface px-3 text-on-surface outline-none focus:ring-2 focus:ring-primary-container" id="restock-quantity" data-confirm-label="Quantity to add" min="0.01" name="quantity" required step="0.01" type="number">
                                 <label class="font-label-sm text-label-sm uppercase text-on-surface-variant" for="restock-note">Note (optional)</label>
                                 <input class="h-12 rounded-lg border border-outline-variant bg-surface px-3 text-on-surface outline-none focus:ring-2 focus:ring-primary-container" id="restock-note" maxlength="255" name="note" placeholder="Delivery or prep note">
                                 <button class="flex min-h-12 items-center justify-center gap-2 rounded-lg bg-primary px-4 font-body-md-bold text-body-md-bold text-on-primary transition-colors hover:bg-primary-container" type="submit">

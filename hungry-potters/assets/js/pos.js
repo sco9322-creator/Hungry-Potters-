@@ -261,5 +261,61 @@
         }
     });
 
+    // Intercept the integrated checkout before its submit handler creates a pending attempt.
+    const checkoutForm = root.querySelector('[data-checkout]');
+    let reviewingCheckout = false;
+    let approvedCheckout = false;
+    checkoutForm?.addEventListener('submit', async event => {
+        if (approvedCheckout) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (reviewingCheckout || submitting) return;
+        reviewingCheckout = true;
+        const submitter = event.submitter;
+        try {
+            if (!window.HPConfirm) {
+                showMessage('Checkout confirmation is unavailable. Refresh and try again.', true);
+                return;
+            }
+            const review = pending?.checkout ?? {
+                method: method.value, total: field('checkout-total').textContent,
+                tendered: tender.value, reference: reference.value.trim()
+            };
+            const lines = pending?.items ?? Array.from(cart.values());
+            const cod = review.method === 'cod';
+            const pesos = new Intl.NumberFormat('en-PH', {style: 'currency', currency: 'PHP'});
+            const details = [
+                {label: 'Order type', value: {dine_in: 'Dine-in', takeout: 'Takeout', delivery: 'Delivery'}[pending?.order_type ?? orderType.value]},
+                {label: 'Items', value: lines.reduce((n, line) => n + Number(line.quantity), 0)},
+                {label: 'Order total', value: pesos.format(review.total)},
+                {label: 'Payment method', value: {cash: 'Cash', ewallet: 'GCash / e-wallet', cod: 'Cash on delivery'}[review.method]}
+            ];
+            if (review.method === 'cash') {
+                details.push({label: 'Cash tendered', value: pesos.format(review.tendered)},
+                    {label: 'Change to give', value: pesos.format(review.tendered - review.total)});
+            } else if (cod) {
+                details.push({label: 'Payment status', value: 'Unpaid — will be sent to kitchen'});
+            } else {
+                details.push({label: 'Transaction reference', value: review.reference});
+            }
+            const ok = await HPConfirm.ask({
+                title: pending ? 'Retry this checkout?' : 'Confirm checkout?',
+                message: cod ? 'Collect payment on delivery.' : pending
+                    ? 'Use the same payment already collected.' : 'Record this payment and send the order to the kitchen.',
+                details, confirmText: pending ? 'Retry same checkout' : cod ? 'Send unpaid order' : 'Pay ' + pesos.format(review.total) + ' and send',
+                cancelText: pending ? 'Cancel' : 'Back to checkout', trigger: submitter || document.activeElement
+            });
+            if (ok) {
+                approvedCheckout = true;
+                if (submitter) checkoutForm.requestSubmit(submitter); else checkoutForm.requestSubmit();
+            }
+        } catch {
+            showMessage('Checkout confirmation failed. Review the ticket and try again.', true);
+        } finally {
+            approvedCheckout = false;
+            reviewingCheckout = false;
+        }
+    }, true);
+
     renderCart();
 })();

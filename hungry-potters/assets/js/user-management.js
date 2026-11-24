@@ -10,11 +10,6 @@
     const resetPasswordSection = dialog?.querySelector('[data-reset-password-section]');
     const resetPasswordInput = dialog?.querySelector('[data-reset-password-input]');
     const helpText = dialog?.querySelector('[data-password-help]');
-    const confirmDialog = document.querySelector('[data-user-confirm-dialog]');
-    const confirmForm = document.querySelector('#user-action-form');
-    const confirmTitle = confirmDialog?.querySelector('[data-user-confirm-title]');
-    const confirmMessage = confirmDialog?.querySelector('[data-user-confirm-message]');
-    const confirmButton = confirmDialog?.querySelector('[data-submit-user-action]');
 
     const setPasswordMode = (mode) => {
         const isAdd = mode === 'add';
@@ -96,29 +91,9 @@
         });
     });
 
-    document.querySelectorAll('[data-confirm-user-action]').forEach((button) => {
-        button.addEventListener('click', () => {
-            if (!confirmDialog || !confirmTitle || !confirmMessage || !confirmForm || !confirmButton) {
-                return;
-            }
-            const action = button.dataset.confirmUserAction || 'deactivate';
-            const name = button.dataset.userName || 'this account';
-            const deactivate = action === 'deactivate';
-            confirmTitle.textContent = deactivate ? 'Deactivate account?' : 'Reactivate account?';
-            confirmMessage.textContent = deactivate
-                ? `Deactivate ${name}? They will no longer be able to sign in.`
-                : `Reactivate ${name}? They will be able to sign in again.`;
-            confirmForm.querySelector('[data-user-action]').value = action;
-            confirmForm.querySelector('[data-user-action-id]').value = button.dataset.userId || '';
-            confirmButton.textContent = deactivate ? 'Deactivate account' : 'Reactivate account';
-            confirmButton.classList.toggle('bg-error-container', deactivate);
-            confirmButton.classList.toggle('text-on-error-container', deactivate);
-            confirmButton.classList.toggle('bg-primary', !deactivate);
-            confirmButton.classList.toggle('text-on-primary', !deactivate);
-            confirmDialog.showModal();
-        });
+    form?.addEventListener('hp-confirm-details', event => {
+        const adding = !form.querySelector('[data-user-modal-id]').value;
+        event.detail.push({label: 'Action', value: adding ? 'Create account' : 'Update account'});
+        if (!adding && resetPasswordInput.value) event.detail.push({label: 'Password', value: 'Reset requested'});
     });
-
-    document.querySelector('[data-close-user-confirm]')?.addEventListener('click', () => confirmDialog?.close());
-    confirmButton?.addEventListener('click', () => confirmForm?.submit());
 })();

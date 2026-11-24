@@ -98,7 +98,13 @@ require __DIR__ . '/includes/header.php';
                         </div>
                         <div class="mt-4 flex flex-wrap justify-end gap-2 border-t border-surface-container-high pt-3">
                             <button class="min-h-9 rounded-lg bg-surface-container px-3 font-label-md text-primary hover:bg-surface-container-high" data-edit-user="<?= h(json_encode($userData, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP)) ?>" type="button">Edit</button>
-                            <button class="min-h-9 rounded-lg px-3 font-label-md <?= $isActive ? 'bg-error-container text-on-error-container' : 'bg-surface-container text-primary' ?>" data-confirm-user-action="<?= $isActive ? 'deactivate' : 'activate' ?>" data-user-id="<?= h($user['id']) ?>" data-user-name="<?= h($user['full_name']) ?>" <?= $isSelf && $isActive ? 'disabled title="You cannot deactivate your own account."' : '' ?> type="button"><?= $isActive ? 'Deactivate' : 'Reactivate' ?></button>
+                            <form action="actions/user-save.php" method="post" data-confirm data-confirm-title="<?= $isActive ? 'Deactivate account' : 'Reactivate account' ?>?" data-confirm-message="<?= $isActive ? 'This user will lose sign-in access.' : 'This user will regain sign-in access.' ?>" data-confirm-text="<?= $isActive ? 'Deactivate account' : 'Reactivate account' ?>" data-confirm-tone="<?= $isActive ? 'danger' : 'default' ?>" data-confirm-rows="<?= h(json_encode(['Name' => $user['full_name'], 'Username' => $user['username']])) ?>">
+                                <input type="hidden" name="csrf_token" value="<?= h(csrf_token()) ?>">
+                                <input type="hidden" name="action" value="<?= $isActive ? 'deactivate' : 'activate' ?>">
+                                <input type="hidden" name="user_id" value="<?= h($user['id']) ?>">
+                                <input type="hidden" name="return_search" value="<?= h($search) ?>">
+                                <button class="min-h-9 rounded-lg px-3 font-label-md <?= $isActive ? 'bg-error-container text-on-error-container' : 'bg-surface-container text-primary' ?>" <?= $isSelf && $isActive ? 'disabled title="You cannot deactivate your own account."' : '' ?> type="submit"><?= $isActive ? 'Deactivate' : 'Reactivate' ?></button>
+                            </form>
                         </div>
                     </article>
                 <?php endforeach; ?>
@@ -145,7 +151,13 @@ require __DIR__ . '/includes/header.php';
                                 <td class="px-5 py-4">
                                     <div class="flex justify-end gap-2">
                                         <button class="min-h-9 rounded-lg bg-surface-container px-3 font-label-md text-primary hover:bg-surface-container-high" data-edit-user="<?= h(json_encode($userData, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP)) ?>" type="button">Edit</button>
-                                        <button class="min-h-9 rounded-lg px-3 font-label-md <?= $isActive ? 'bg-error-container text-on-error-container' : 'bg-surface-container text-primary' ?>" data-confirm-user-action="<?= $isActive ? 'deactivate' : 'activate' ?>" data-user-id="<?= h($user['id']) ?>" data-user-name="<?= h($user['full_name']) ?>" <?= $isSelf && $isActive ? 'disabled title="You cannot deactivate your own account."' : '' ?> type="button"><?= $isActive ? 'Deactivate' : 'Reactivate' ?></button>
+                                        <form action="actions/user-save.php" method="post" data-confirm data-confirm-title="<?= $isActive ? 'Deactivate account' : 'Reactivate account' ?>?" data-confirm-message="<?= $isActive ? 'This user will lose sign-in access.' : 'This user will regain sign-in access.' ?>" data-confirm-text="<?= $isActive ? 'Deactivate account' : 'Reactivate account' ?>" data-confirm-tone="<?= $isActive ? 'danger' : 'default' ?>" data-confirm-rows="<?= h(json_encode(['Name' => $user['full_name'], 'Username' => $user['username']])) ?>">
+                                            <input type="hidden" name="csrf_token" value="<?= h(csrf_token()) ?>">
+                                            <input type="hidden" name="action" value="<?= $isActive ? 'deactivate' : 'activate' ?>">
+                                            <input type="hidden" name="user_id" value="<?= h($user['id']) ?>">
+                                            <input type="hidden" name="return_search" value="<?= h($search) ?>">
+                                            <button class="min-h-9 rounded-lg px-3 font-label-md <?= $isActive ? 'bg-error-container text-on-error-container' : 'bg-surface-container text-primary' ?>" <?= $isSelf && $isActive ? 'disabled title="You cannot deactivate your own account."' : '' ?> type="submit"><?= $isActive ? 'Deactivate' : 'Reactivate' ?></button>
+                                        </form>
                                     </div>
                                 </td>
                             </tr>
@@ -158,7 +170,7 @@ require __DIR__ . '/includes/header.php';
 </div>
 
 <dialog aria-labelledby="user-modal-title" class="m-auto w-[calc(100%-2rem)] max-w-xl rounded-2xl bg-surface-container-lowest p-0 text-on-surface shadow-2xl backdrop:bg-primary/40" data-user-dialog>
-    <form action="actions/user-save.php" class="flex max-h-[90vh] flex-col" id="user-account-form" method="post">
+    <form action="actions/user-save.php" class="flex max-h-[90vh] flex-col" data-confirm data-confirm-title="Save account?" data-confirm-message="Review the account details and access level." data-confirm-text="Save account" id="user-account-form" method="post">
         <input name="csrf_token" type="hidden" value="<?= h(csrf_token()) ?>">
         <input name="action" type="hidden" value="save">
         <input data-user-modal-id name="user_id" type="hidden" value="">
@@ -172,13 +184,13 @@ require __DIR__ . '/includes/header.php';
         </div>
         <div class="grid gap-4 overflow-y-auto p-5 sm:grid-cols-2 sm:p-6">
             <label class="flex flex-col gap-1 font-label-md text-on-surface-variant sm:col-span-2">Full name
-                <input class="h-11 rounded-lg bg-surface-container-low px-3 text-on-surface focus:outline-none focus:ring-2 focus:ring-primary-container" maxlength="100" name="full_name" required>
+                <input class="h-11 rounded-lg bg-surface-container-low px-3 text-on-surface focus:outline-none focus:ring-2 focus:ring-primary-container" maxlength="100" data-confirm-label="Full name" name="full_name" required>
             </label>
             <label class="flex flex-col gap-1 font-label-md text-on-surface-variant">Username
-                <input autocomplete="off" class="h-11 rounded-lg bg-surface-container-low px-3 text-on-surface focus:outline-none focus:ring-2 focus:ring-primary-container" maxlength="50" name="username" required>
+                <input autocomplete="off" class="h-11 rounded-lg bg-surface-container-low px-3 text-on-surface focus:outline-none focus:ring-2 focus:ring-primary-container" maxlength="50" data-confirm-label="Username" name="username" required>
             </label>
             <label class="flex flex-col gap-1 font-label-md text-on-surface-variant">Role
-                <select class="h-11 rounded-lg bg-surface-container-low px-3 text-on-surface focus:outline-none focus:ring-2 focus:ring-primary-container" name="role" required>
+                <select class="h-11 rounded-lg bg-surface-container-low px-3 text-on-surface focus:outline-none focus:ring-2 focus:ring-primary-container" data-confirm-label="Role" name="role" required>
                     <option value="admin">Admin</option><option value="cashier">Cashier</option><option value="kitchen">Kitchen</option>
                 </select>
             </label>
@@ -213,20 +225,4 @@ require __DIR__ . '/includes/header.php';
     </form>
 </dialog>
 
-<dialog aria-labelledby="user-confirm-title" class="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl bg-surface-container-lowest p-0 text-on-surface shadow-2xl backdrop:bg-primary/40" data-user-confirm-dialog>
-    <div class="p-6">
-        <h2 class="font-body-md-bold text-xl text-primary" data-user-confirm-title id="user-confirm-title">Confirm account action</h2>
-        <p class="mt-2 font-body-md text-on-surface-variant" data-user-confirm-message></p>
-        <div class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <button class="min-h-11 rounded-lg bg-surface-container px-5 font-body-md-bold text-primary hover:bg-surface-container-high" data-close-user-confirm type="button">Cancel</button>
-            <button class="min-h-11 rounded-lg bg-error-container px-5 font-body-md-bold text-on-error-container" data-submit-user-action type="button">Confirm</button>
-        </div>
-    </div>
-</dialog>
-<form action="actions/user-save.php" class="hidden" id="user-action-form" method="post">
-    <input name="csrf_token" type="hidden" value="<?= h(csrf_token()) ?>">
-    <input data-user-action name="action" type="hidden" value="">
-    <input data-user-action-id name="user_id" type="hidden" value="">
-    <input name="return_search" type="hidden" value="<?= h($search) ?>">
-</form>
 <?php require __DIR__ . '/includes/footer.php'; ?>

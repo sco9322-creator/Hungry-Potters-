@@ -94,11 +94,6 @@
     const recipeError = dialog?.querySelector('[data-recipe-error]');
     const modalTitle = dialog?.querySelector('[data-menu-modal-title]');
     const saveButton = dialog?.querySelector('[data-menu-save]');
-    const confirmDialog = document.querySelector('[data-menu-confirm-dialog]');
-    const confirmForm = document.querySelector('#menu-action-form');
-    const confirmTitle = confirmDialog?.querySelector('[data-menu-confirm-title]');
-    const confirmMessage = confirmDialog?.querySelector('[data-menu-confirm-message]');
-    const confirmButton = confirmDialog?.querySelector('[data-submit-menu-action]');
     let recipeRowIndex = 0;
 
     const refreshRecipeRows = () => {
@@ -265,29 +260,8 @@
         button.addEventListener('click', () => dialog?.close());
     });
 
-    document.querySelectorAll('[data-confirm-action]').forEach((button) => {
-        button.addEventListener('click', () => {
-            if (!confirmDialog || !confirmTitle || !confirmMessage || !confirmForm) {
-                return;
-            }
-            const action = button.dataset.confirmAction || 'archive';
-            const itemName = button.dataset.itemName || 'this dish';
-            const isArchive = action === 'archive';
-            confirmTitle.textContent = isArchive ? 'Archive dish?' : 'Restore dish?';
-            confirmMessage.textContent = isArchive
-                ? `Archive ${itemName}? It will be removed from the active menu, while past order history remains unchanged.`
-                : `Restore ${itemName} to the active menu?`;
-            confirmForm.querySelector('[data-menu-action]').value = action;
-            confirmForm.querySelector('[data-menu-action-item]').value = button.dataset.itemId || '';
-            confirmButton.textContent = isArchive ? 'Archive dish' : 'Restore dish';
-            confirmButton.classList.toggle('bg-error-container', isArchive);
-            confirmButton.classList.toggle('text-on-error-container', isArchive);
-            confirmButton.classList.toggle('bg-primary', !isArchive);
-            confirmButton.classList.toggle('text-on-primary', !isArchive);
-            confirmDialog.showModal();
-        });
+    form?.addEventListener('hp-confirm-details', event => {
+        event.detail.push({label: 'Availability requested', value: form.elements.is_available.checked ? 'Available' : 'Unavailable'});
+        event.detail.push({label: 'Recipe ingredients', value: recipeRows.querySelectorAll('[data-recipe-row]').length});
     });
-
-    document.querySelector('[data-close-menu-confirm]')?.addEventListener('click', () => confirmDialog?.close());
-    confirmButton?.addEventListener('click', () => confirmForm?.submit());
 })();

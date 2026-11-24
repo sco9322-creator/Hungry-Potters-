@@ -187,7 +187,7 @@ $returnQuery = http_build_query(array_filter([
                             </div>
                         </div>
                         <div class="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-surface-container-high pt-3">
-                            <form action="actions/menu-save.php" method="post">
+                            <form action="actions/menu-save.php" method="post" data-confirm data-confirm-title="Change dish availability?" data-confirm-message="Update whether cashiers can order this dish." data-confirm-text="Change availability" data-confirm-rows="<?= h(json_encode(['Dish' => $item['name'], 'New availability' => $isAvailable ? 'Unavailable' : 'Available'])) ?>">
                                 <input name="csrf_token" type="hidden" value="<?= h(csrf_token()) ?>">
                                 <input name="action" type="hidden" value="toggle_availability">
                                 <input name="item_id" type="hidden" value="<?= h($item['id']) ?>">
@@ -197,7 +197,13 @@ $returnQuery = http_build_query(array_filter([
                             </form>
                             <div class="flex gap-2">
                                 <button class="min-h-9 rounded-lg bg-surface-container px-3 font-label-md text-primary hover:bg-surface-container-high" data-edit-dish="<?= h(json_encode($itemData, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP)) ?>" type="button">Edit</button>
-                                <button class="min-h-9 rounded-lg px-3 font-label-md <?= $status === 'active' ? 'bg-error-container text-on-error-container' : 'bg-surface-container text-primary' ?>" data-confirm-action="<?= $status === 'active' ? 'archive' : 'restore' ?>" data-item-id="<?= h($item['id']) ?>" data-item-name="<?= h($item['name']) ?>" type="button"><?= $status === 'active' ? 'Archive' : 'Restore' ?></button>
+                                <form action="actions/menu-save.php" method="post" data-confirm data-confirm-title="<?= $status === 'active' ? 'Archive dish' : 'Restore dish' ?>?" data-confirm-message="<?= $status === 'active' ? 'Remove this dish from the active menu. Past orders keep their history.' : 'Return this dish to the active menu.' ?>" data-confirm-text="<?= $status === 'active' ? 'Archive dish' : 'Restore dish' ?>" data-confirm-tone="<?= $status === 'active' ? 'danger' : 'default' ?>" data-confirm-rows="<?= h(json_encode(['Dish' => $item['name']])) ?>">
+                                    <input type="hidden" name="csrf_token" value="<?= h(csrf_token()) ?>">
+                                    <input type="hidden" name="action" value="<?= $status === 'active' ? 'archive' : 'restore' ?>">
+                                    <input type="hidden" name="item_id" value="<?= h($item['id']) ?>">
+                                    <input type="hidden" name="return_query" value="<?= h($returnQuery) ?>">
+                                    <button class="min-h-9 rounded-lg px-3 font-label-md <?= $status === 'active' ? 'bg-error-container text-on-error-container' : 'bg-surface-container text-primary' ?>" type="submit"><?= $status === 'active' ? 'Archive' : 'Restore' ?></button>
+                                </form>
                             </div>
                         </div>
                     </article>
@@ -239,7 +245,7 @@ $returnQuery = http_build_query(array_filter([
                                 <td class="px-5 py-3 font-body-md text-on-surface-variant"><?= h($item['category_name']) ?></td>
                                 <td class="px-5 py-3 font-body-md text-on-surface">₱<?= h(number_format((float) $item['price'], 2)) ?></td>
                                 <td class="px-5 py-3">
-                                    <form action="actions/menu-save.php" method="post">
+                                    <form action="actions/menu-save.php" method="post" data-confirm data-confirm-title="Change dish availability?" data-confirm-message="Update whether cashiers can order this dish." data-confirm-text="Change availability" data-confirm-rows="<?= h(json_encode(['Dish' => $item['name'], 'New availability' => $isAvailable ? 'Unavailable' : 'Available'])) ?>">
                                         <input name="csrf_token" type="hidden" value="<?= h(csrf_token()) ?>">
                                         <input name="action" type="hidden" value="toggle_availability">
                                         <input name="item_id" type="hidden" value="<?= h($item['id']) ?>">
@@ -258,7 +264,13 @@ $returnQuery = http_build_query(array_filter([
                                 <td class="px-5 py-3">
                                     <div class="flex justify-end gap-2">
                                         <button class="min-h-9 rounded-lg bg-surface-container px-3 font-label-md text-primary hover:bg-surface-container-high" data-edit-dish="<?= h(json_encode($itemData, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP)) ?>" type="button">Edit</button>
-                                        <button class="min-h-9 rounded-lg px-3 font-label-md <?= $status === 'active' ? 'bg-error-container text-on-error-container' : 'bg-surface-container text-primary' ?>" data-confirm-action="<?= $status === 'active' ? 'archive' : 'restore' ?>" data-item-id="<?= h($item['id']) ?>" data-item-name="<?= h($item['name']) ?>" type="button"><?= $status === 'active' ? 'Archive' : 'Restore' ?></button>
+                                        <form action="actions/menu-save.php" method="post" data-confirm data-confirm-title="<?= $status === 'active' ? 'Archive dish' : 'Restore dish' ?>?" data-confirm-message="<?= $status === 'active' ? 'Remove this dish from the active menu. Past orders keep their history.' : 'Return this dish to the active menu.' ?>" data-confirm-text="<?= $status === 'active' ? 'Archive dish' : 'Restore dish' ?>" data-confirm-tone="<?= $status === 'active' ? 'danger' : 'default' ?>" data-confirm-rows="<?= h(json_encode(['Dish' => $item['name']])) ?>">
+                                            <input type="hidden" name="csrf_token" value="<?= h(csrf_token()) ?>">
+                                            <input type="hidden" name="action" value="<?= $status === 'active' ? 'archive' : 'restore' ?>">
+                                            <input type="hidden" name="item_id" value="<?= h($item['id']) ?>">
+                                            <input type="hidden" name="return_query" value="<?= h($returnQuery) ?>">
+                                            <button class="min-h-9 rounded-lg px-3 font-label-md <?= $status === 'active' ? 'bg-error-container text-on-error-container' : 'bg-surface-container text-primary' ?>" type="submit"><?= $status === 'active' ? 'Archive' : 'Restore' ?></button>
+                                        </form>
                                     </div>
                                 </td>
                             </tr>
@@ -271,7 +283,7 @@ $returnQuery = http_build_query(array_filter([
 </div>
 
 <dialog aria-labelledby="menu-modal-title" class="m-auto w-[calc(100%-2rem)] max-w-2xl rounded-2xl bg-surface-container-lowest p-0 text-on-surface shadow-2xl backdrop:bg-primary/40" data-menu-dialog>
-    <form action="actions/menu-save.php" class="flex max-h-[90vh] flex-col" enctype="multipart/form-data" id="menu-dish-form" method="post">
+    <form action="actions/menu-save.php" class="flex max-h-[90vh] flex-col" enctype="multipart/form-data" data-confirm data-confirm-title="Save dish?" data-confirm-message="Review this dish before saving it to the menu." data-confirm-text="Save dish" id="menu-dish-form" method="post">
         <input name="csrf_token" type="hidden" value="<?= h(csrf_token()) ?>">
         <input name="action" type="hidden" value="save">
         <input data-menu-item-id name="item_id" type="hidden" value="">
@@ -287,16 +299,16 @@ $returnQuery = http_build_query(array_filter([
         </div>
         <div class="grid gap-4 overflow-y-auto p-5 sm:grid-cols-2 sm:p-6">
             <label class="flex flex-col gap-1 font-label-md text-on-surface-variant sm:col-span-2">Dish name
-                <input class="h-11 rounded-lg bg-surface-container-low px-3 text-on-surface focus:outline-none focus:ring-2 focus:ring-primary-container" maxlength="100" name="name" required>
+                <input class="h-11 rounded-lg bg-surface-container-low px-3 text-on-surface focus:outline-none focus:ring-2 focus:ring-primary-container" maxlength="100" data-confirm-label="Dish" name="name" required>
             </label>
             <label class="flex flex-col gap-1 font-label-md text-on-surface-variant">Category
-                <select class="h-11 rounded-lg bg-surface-container-low px-3 text-on-surface focus:outline-none focus:ring-2 focus:ring-primary-container" name="category_id" required>
+                <select class="h-11 rounded-lg bg-surface-container-low px-3 text-on-surface focus:outline-none focus:ring-2 focus:ring-primary-container" data-confirm-label="Category" name="category_id" required>
                     <option value="">Choose category</option>
                     <?php foreach ($categories as $category): ?><option value="<?= h($category['id']) ?>"><?= h($category['name']) ?></option><?php endforeach; ?>
                 </select>
             </label>
             <label class="flex flex-col gap-1 font-label-md text-on-surface-variant">Price (₱)
-                <input class="h-11 rounded-lg bg-surface-container-low px-3 text-on-surface focus:outline-none focus:ring-2 focus:ring-primary-container" min="0" name="price" required step="0.01" type="number">
+                <input class="h-11 rounded-lg bg-surface-container-low px-3 text-on-surface focus:outline-none focus:ring-2 focus:ring-primary-container" min="0" data-confirm-label="Price" data-confirm-format="peso" name="price" required step="0.01" type="number">
             </label>
             <div class="flex flex-col gap-2 font-label-md text-on-surface-variant sm:col-span-2" data-image-upload-control>
                 <input name="MAX_FILE_SIZE" type="hidden" value="2097152">
@@ -360,20 +372,4 @@ $returnQuery = http_build_query(array_filter([
     </form>
 </dialog>
 
-<dialog aria-labelledby="menu-confirm-title" class="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl bg-surface-container-lowest p-0 text-on-surface shadow-2xl backdrop:bg-primary/40" data-menu-confirm-dialog>
-    <div class="p-6">
-        <h2 class="font-body-md-bold text-xl text-primary" id="menu-confirm-title" data-menu-confirm-title>Confirm action</h2>
-        <p class="mt-2 font-body-md text-on-surface-variant" data-menu-confirm-message></p>
-        <div class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <button class="min-h-11 rounded-lg bg-surface-container px-5 font-body-md-bold text-primary hover:bg-surface-container-high" data-close-menu-confirm type="button">Cancel</button>
-            <button class="min-h-11 rounded-lg bg-error-container px-5 font-body-md-bold text-on-error-container" data-submit-menu-action type="button">Confirm</button>
-        </div>
-    </div>
-</dialog>
-<form action="actions/menu-save.php" class="hidden" id="menu-action-form" method="post">
-    <input name="csrf_token" type="hidden" value="<?= h(csrf_token()) ?>">
-    <input data-menu-action name="action" type="hidden" value="">
-    <input data-menu-action-item name="item_id" type="hidden" value="">
-    <input name="return_query" type="hidden" value="<?= h($returnQuery) ?>">
-</form>
 <?php require __DIR__ . '/includes/footer.php'; ?>

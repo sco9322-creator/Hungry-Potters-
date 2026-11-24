@@ -86,6 +86,10 @@ CREATE TABLE IF NOT EXISTS menu_recipes (
 CREATE TABLE IF NOT EXISTS orders (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     order_number VARCHAR(32) NOT NULL UNIQUE,
+    checkout_token CHAR(36) CHARACTER SET ascii DEFAULT NULL,
+    checkout_request_hash CHAR(64) CHARACTER SET ascii DEFAULT NULL,
+    checkout_mode ENUM('prepaid','cod') DEFAULT NULL,
+    UNIQUE KEY uq_orders_checkout_token (checkout_token),
     slip_number VARCHAR(32) DEFAULT NULL UNIQUE,
     queue_number INT UNSIGNED NOT NULL,
     order_type ENUM('dine_in', 'takeout', 'delivery') NOT NULL,
